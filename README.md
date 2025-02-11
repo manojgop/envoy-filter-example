@@ -44,3 +44,45 @@ Envoy binary as a new filter.
 
 2. Execute below command in terminal 2
    `echo "test" | nc 127.0.0.1 10002`
+
+## Test echo filter with rbac filter
+
+1. RBAC filter is configured to allow request only from IPV4 address 127.0.0.1. Any traffic
+   originating from other ip addresses will be denied.
+
+2. Execute following command from repo root directory in Terminal 1. Enable debug logs in rbac
+   filter and trace log in echo filter.
+   `$(bazel info bazel-genfiles)/envoy --config-path rbac_echo2.yaml --component-log-level rbac:debug,filter:trace`
+
+3. From Terminal 2, Try directly connecting to listener to address http://127.0.0.1:1002 via curl using
+   following command
+   `curl --noproxy '*' -X POST -H "Content-Type: text/plain" -d "My test" http://127.0.0.1:10002 -v`
+
+   Following logs should be seen in Terminal 1.
+   ```
+   [2025-02-11 05:59:46.572][3435892][debug][rbac] [external/envoy/source/extensions/filters/network/rbac/rbac_filter.cc:191] enforced allowed, matched policy allow
+   [2025-02-11 05:59:46.572][3435892][trace][filter] [echo2.cc:26] [Tags: "ConnectionId":"6"] echo: got 132 bytes
+   ```
+
+4. From Terminal 2, Try connecting to listener to address http://127.0.0.1:1002 via curl
+   using a proxy (use curl -x option). Use proxy address as IP address of another interface in your system (other than 127.0.0.1).
+   `curl -X POST -H "Content-Type: text/plain" -d "My test" -x http://143.182.136.128:10002 http://127.0.0.1:10002 -v`
+
+   Envoy RBAC filter will reject the traffic originiating from proxy IP address.
+   Following logs should be seen in Terminal 1.
+   ```
+   [2025-02-11 05:57:01.022][3435871][debug][rbac] [external/envoy/source/extensions/filters/network/rbac/rbac_filter.cc:203] enforced denied, matched policy none
+   ```
+
+5. Execute the following command from Terminal 2 to get the statistics
+   `curl --noproxy '*' http://127.0.0.1:10001/stats | grep "log"`
+
+   Following logs should be seen in Terminal 2.
+   ```
+   log.echo2.received: 1
+   log.rbac.allowed: 1
+   log.rbac.denied: 1
+   log.rbac.shadow_allowed: 0
+   log.rbac.shadow_denied: 0
+   ```
+
