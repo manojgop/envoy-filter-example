@@ -7,6 +7,8 @@ load(
     "envoy_cc_test",
 )
 
+load("@envoy_api//bazel:api_build_system.bzl", "api_proto_package")
+
 envoy_cc_binary(
     name = "envoy",
     repository = "@envoy",
@@ -16,12 +18,15 @@ envoy_cc_binary(
     ],
 )
 
+api_proto_package()
+
 envoy_cc_library(
     name = "echo2_lib",
     srcs = ["echo2.cc"],
     hdrs = ["echo2.h"],
     repository = "@envoy",
     deps = [
+        ":pkg_cc_proto",
         "@envoy//envoy/buffer:buffer_interface",
         "@envoy//envoy/network:connection_interface",
         "@envoy//envoy/network:filter_interface",

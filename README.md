@@ -36,3 +36,11 @@ The [`BUILD`](BUILD) file introduces a new Envoy static binary target, `envoy`,
 that links together the new filter and `@envoy//source/exe:envoy_main_entry_lib`. The
 `echo2` filter registers itself during the static initialization phase of the
 Envoy binary as a new filter.
+
+## Test echo filter standalone
+
+1. After building envoy static binary, execute following command from repo root directory in Terminal 1
+   `$(bazel info bazel-genfiles)/envoy --config-path echo2_server.yaml --component-log-level filter:trace`
+
+2. Execute below command in terminal 2
+   `echo "test" | nc 127.0.0.1 10002`
