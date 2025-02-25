@@ -40,8 +40,10 @@ envoy_cc_library(
         "@envoy//envoy/network:filter_interface",
         "@envoy//envoy/stats:stats_interface",
         "@envoy//envoy/stats:stats_macros",
+        "@envoy//source/common/buffer:buffer_lib",
         "@envoy//source/common/common:assert_lib",
         "@envoy//source/common/common:logger_lib",
+        "@envoy//source/common/event:dispatcher_lib",
         "@envoy//source/common/network:cidr_range_lib",
     ],
 )
