@@ -37,6 +37,16 @@ static_resources:
                 route:
                   cluster: service-http
           http_filters:
+          - name: envoy.filters.http.lua
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+              inline_code: |
+                # Remove all query parameters in http request before routing to upstream
+                function envoy_on_request(request_handle)
+                    local path = request_handle:headers():get(":path")
+                    local new_path = string.match(path, "^[^?]*")
+                    request_handle:headers():replace(":path", new_path)
+                end
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router

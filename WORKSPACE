@@ -28,3 +28,12 @@ envoy_python_dependencies()
 load("@envoy//bazel:dependency_imports.bzl", "envoy_dependency_imports")
 
 envoy_dependency_imports()
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "libpcap",
+    urls = ["https://www.tcpdump.org/release/libpcap-1.10.1.tar.gz"],
+    strip_prefix = "libpcap-1.10.1",
+    build_file = "@//snort-filter/libpcap:BUILD",
+)

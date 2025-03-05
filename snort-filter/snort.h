@@ -9,6 +9,9 @@
 #include "source/common/common/logger.h"
 #include "source/common/network/cidr_range.h"
 #include "source/common/buffer/buffer_impl.h"
+#include <pcap.h>
+#include <mutex>
+
 
 namespace Envoy {
 namespace Filter {
@@ -60,12 +63,8 @@ using SnortFilterConfigSharedPtr = std::shared_ptr<SnortFilterConfig>;
 class Analyzer : public Logger::Loggable<Logger::Id::filter> {
 public:
 Analyzer(SnortFilterConfigSharedPtr config, Network::Connection &connection,
-            std::chrono::milliseconds tick_interval, uint64_t max_chunk_length,
-            std::function<void(Buffer::Instance&, bool)> next_chunk_cb)
-      : config_(config), connection_(connection),
-        timer_(connection.dispatcher().createTimer([this] { onTimerTick(); })),
-        tick_interval_(tick_interval),
-        max_chunk_length_(max_chunk_length), next_chunk_cb_(next_chunk_cb) {}
+          std::chrono::milliseconds tick_interval, uint64_t max_chunk_length,
+          std::function<void(Buffer::Instance&, bool)> next_chunk_cb);
 
   /**
    * Analyze given given request/response data.
@@ -78,6 +77,7 @@ Analyzer(SnortFilterConfigSharedPtr config, Network::Connection &connection,
 
 private:
   void onTimerTick();
+  Buffer::OwnedImpl createPacket(Buffer::Instance& data);
 
   Buffer::OwnedImpl buffer_{};
   bool end_stream_{};
@@ -88,13 +88,37 @@ private:
   const std::chrono::milliseconds tick_interval_;
   const uint64_t max_chunk_length_;
   const std::function<void(Buffer::Instance&, bool)> next_chunk_cb_;
+
 };
 
+/**
+ * Pcap file writer
+ */
+class PcapFileManager: public Logger::Loggable<Logger::Id::filter> {
+public:
+    static PcapFileManager& getInstance() {
+        static PcapFileManager instance;
+        return instance;
+    }
+
+    void writePacket(const uint8_t* data, size_t length);
+    void close();
+
+private:
+    PcapFileManager();
+    ~PcapFileManager();
+
+    pcap_t* pcap_ = nullptr;
+    pcap_dumper_t* dumper_ = nullptr;
+    std::mutex mutex_;
+};
+
+static PcapFileManager& pcap_file_manager = PcapFileManager::getInstance();
 
 /**
  * Implementation of a basic snort filter.
  */
-class Snort : public Network::ReadFilter, Network::ConnectionCallbacks,
+class Snort : public Network::ReadFilter, Network::WriteFilter, Network::ConnectionCallbacks,
               Logger::Loggable<Logger::Id::filter> {
 public:
   Snort(SnortFilterConfigSharedPtr);
@@ -103,6 +127,10 @@ public:
   Network::FilterStatus onData(Buffer::Instance& data, bool end_stream) override;
   Network::FilterStatus onNewConnection() override { return Network::FilterStatus::Continue; }
   void initializeReadFilterCallbacks(Network::ReadFilterCallbacks& callbacks) override;
+
+  // Network::WriteFilter
+  Network::FilterStatus onWrite(Buffer::Instance& data, bool end_stream) override;
+  void initializeWriteFilterCallbacks(Network::WriteFilterCallbacks& callbacks) override;
 
   // Network::ConnectionCallbacks
   void onEvent(Network::ConnectionEvent event) override;
@@ -114,7 +142,9 @@ private:
   std::chrono::milliseconds tick_interval_;
   uint64_t max_chunk_length_;
   Network::ReadFilterCallbacks* read_callbacks_{};
+  Network::WriteFilterCallbacks* write_callbacks_{};
   std::unique_ptr<Analyzer> read_analyzer_;
+  std::unique_ptr<Analyzer> write_analyzer_;
 };
 
 } // namespace Filter

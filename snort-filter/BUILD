@@ -16,6 +16,7 @@ envoy_cc_binary(
         ":snort_config",
         "@envoy//source/exe:envoy_main_entry_lib",
     ],
+    linkopts = ["-lpcap"],
 )
 
 api_proto_package(
@@ -35,6 +36,7 @@ envoy_cc_library(
     repository = "@envoy",
     deps = [
         ":pkg_cc_proto",
+        "//snort-filter/libpcap:libpcap",
         "@envoy//envoy/buffer:buffer_interface",
         "@envoy//envoy/network:connection_interface",
         "@envoy//envoy/network:filter_interface",
