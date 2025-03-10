@@ -89,10 +89,14 @@ private:
 
   std::string serializeRequestHeaders(const Http::RequestHeaderMap& headers);
   std::string serializeResponseHeaders(const Envoy::Http::ResponseHeaderMap& headers);
-  Buffer::OwnedImpl createPacket(Buffer::Instance& data,
-                                 Network::Address::InstanceConstSharedPtr& source_address,
-                                 Network::Address::InstanceConstSharedPtr& destination_address);
-  uint16_t checksum(uint16_t* buf, size_t nwords);
+  std::string serializeRequestTrailers(const Http::RequestTrailerMap& trailers);
+  std::string serializeResponseTrailers(const Http::ResponseTrailerMap& trailers);
+  std::string serializeHeaders(const Http::HeaderMap& headers);
+  Buffer::OwnedImpl
+  createPacket(Buffer::Instance& data,
+               const Network::Address::InstanceConstSharedPtr& source_address,
+               const Network::Address::InstanceConstSharedPtr& destination_address);
+  uint16_t checksum(const uint16_t* buf, size_t nwords);
   bool checkIP(const std::string& ip);
 };
 

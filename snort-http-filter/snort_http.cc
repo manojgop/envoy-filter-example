@@ -55,14 +55,17 @@ FilterHeadersStatus SnortHttpFilter::decodeHeaders(Http::RequestHeaderMap& heade
 
 FilterDataStatus SnortHttpFilter::decodeData(Buffer::Instance& data, bool end_stream) {
   ENVOY_LOG(trace, "snort http: decodeData got {} bytes", data.length());
-  // Copy data to internal buffer
-  buffered_request_data_.add(data);
 
-  // Drain the data to ensure decodeData() gets new data
-  data.drain(data.length());
+  // Move data to internal buffer
+  // This will also drain the data to ensure decodeData() gets new data on next call
+  buffered_request_data_.move(data);
 
   if (end_stream) {
     analyzeRequest();
+    // Move the buffered data back to data and call continue.
+    // This will pass the buffered data to the next filter in the filter chain.
+    data.move(buffered_request_data_);
+    return Http::FilterDataStatus::Continue;
   }
   return Http::FilterDataStatus::StopIterationAndBuffer;
 }
@@ -92,14 +95,18 @@ FilterHeadersStatus SnortHttpFilter::encodeHeaders(Http::ResponseHeaderMap& head
 FilterDataStatus SnortHttpFilter::encodeData(Buffer::Instance& data, bool end_stream) {
   ENVOY_LOG(trace, "snort http: encodeData got {} bytes, end_stream: {}", data.length(),
             end_stream);
-  // Copy data to internal buffer
-  buffered_response_data_.add(data);
-
-  // Drain the data to ensure encodeData() gets new data
-  data.drain(data.length());
+  // Move data to internal buffer
+  // This will also drain the data to ensure encodeData() gets new data on next call
+  buffered_response_data_.move(data);
 
   if (end_stream) {
     analyzeResponse();
+    ENVOY_LOG(trace, "snort http: encodeData Got end stream");
+    // Move the buffered data back to data and call continue.
+    // This will pass the buffered data to the next filter in the filter chain.
+    data.move(buffered_response_data_);
+    ENVOY_LOG(trace, "snort http: encodeData Got end stream #2");
+    return Http::FilterDataStatus::Continue;
   }
 
   return Http::FilterDataStatus::StopIterationAndBuffer;
@@ -117,41 +124,26 @@ void SnortHttpFilter::setEncoderFilterCallbacks(Http::StreamEncoderFilterCallbac
 
 void SnortHttpFilter::analyzeRequest() {
   config_->stats().total_request_.inc();
-  // Offload analysis to the dispatcher
-  auto& dispatcher = decoder_callbacks_->dispatcher();
-  dispatcher.post([this] {
-    bool result = performRequestAnalysis();
-    if (result) {
-      config_->stats().allowed_request_.inc();
-      decoder_callbacks_->injectDecodedDataToFilterChain(buffered_request_data_, true);
-      // decoder_callbacks_->continueDecoding();
-    } else {
-      config_->stats().denied_request_.inc();
-      decoder_callbacks_->sendLocalReply(Http::Code::Forbidden,
-                                         "Request denied by snort http filter\n", nullptr,
-                                         absl::nullopt, "");
-    }
-    buffered_request_data_.drain(buffered_request_data_.length());
-  });
+  bool result = performRequestAnalysis();
+  if (result) {
+    config_->stats().allowed_request_.inc();
+  } else {
+    config_->stats().denied_request_.inc();
+    decoder_callbacks_->sendLocalReply(
+        Http::Code::Forbidden, "Request denied by snort http filter\n", nullptr, absl::nullopt, "");
+  }
 }
 
 void SnortHttpFilter::analyzeResponse() {
   config_->stats().total_response_.inc();
-  // Offload analysis to the dispatcher
-  auto& dispatcher = encoder_callbacks_->dispatcher();
-  dispatcher.post([this] {
-    bool result = performResponseAnalysis();
-    if (result) {
-      config_->stats().allowed_response_.inc();
-      encoder_callbacks_->injectEncodedDataToFilterChain(buffered_response_data_, true);
-      // encoder_callbacks_->continueEncoding();
-    } else {
-      config_->stats().denied_response_.inc();
-      encoder_callbacks_->sendLocalReply(Http::Code::Forbidden, "Denied by snort http filter\n",
-                                         nullptr, absl::nullopt, "");
-    }
-    buffered_response_data_.drain(buffered_response_data_.length());
-  });
+  bool result = performResponseAnalysis();
+  if (result) {
+    config_->stats().allowed_response_.inc();
+  } else {
+    config_->stats().denied_response_.inc();
+    encoder_callbacks_->sendLocalReply(Http::Code::Forbidden, "Denied by snort http filter\n",
+                                       nullptr, absl::nullopt, "");
+  }
 }
 
 bool SnortHttpFilter::performRequestAnalysis() {
@@ -163,6 +155,10 @@ bool SnortHttpFilter::performRequestAnalysis() {
   if (buffered_request_data_.length() > 0) {
     buffer.add(buffered_request_data_);
   }
+  /*if (request_trailers_) {
+    std::string s = serializeRequestTrailes(*request_trailers_);
+    buffer.add(s);
+  }*/
 
   // Get connection details
   auto& connection = decoder_callbacks_->connection().ref();
@@ -244,21 +240,11 @@ std::string SnortHttpFilter::serializeRequestHeaders(const Http::RequestHeaderMa
       "snort serializeRequestHeaders: method: {}, scheme: {}, path: {}, host: {}, protocol: {}",
       method, scheme, path, host, protocol);
 
+  // Add HTTP request line in payload (e.g:  GET http://example.com/xyz/ HTTP/1.1)
   result += method + " " + scheme + "://" + host + path + " " + protocol + "\r\n";
 
   // Serialize each header
-  headers.iterate([&result](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
-    auto key = std::string(header.key().getStringView());
-    // Ignore key starting with ":" (e.g: ":authority", ":path")
-    if (key.starts_with(":")) {
-      return Http::HeaderMap::Iterate::Continue;
-    }
-    auto val = std::string(header.value().getStringView());
-    result += key + ": " + val + "\r\n";
-    return Http::HeaderMap::Iterate::Continue;
-  });
-
-  result += "\r\n"; // End of headers
+  result += serializeHeaders(headers);
 
   ENVOY_LOG(trace, "snort serializeRequestHeaders: result: {}", result);
 
@@ -272,12 +258,31 @@ std::string SnortHttpFilter::serializeResponseHeaders(const Http::ResponseHeader
   auto status_code = std::string(headers.getStatusValue());
   auto status_code_string =
       std::string(CodeUtility::toString(static_cast<Http::Code>(std::stoi(status_code))));
+
+  // Add HTTP response line in payload (e.g: HTTP/1.1 200 OK)
   result += "HTTP/1.1 " + status_code + " " + status_code_string + "\r\n";
+
+  // Serialize each header
+  result += serializeHeaders(headers);
+
+  return result;
+}
+
+std::string SnortHttpFilter::serializeRequestTrailers(const Http::RequestTrailerMap& trailers) {
+  return serializeHeaders(trailers);
+}
+
+std::string SnortHttpFilter::serializeResponseTrailers(const Http::ResponseTrailerMap& trailers) {
+  return serializeHeaders(trailers);
+}
+
+std::string SnortHttpFilter::serializeHeaders(const Http::HeaderMap& headers) {
+  std::string result;
 
   // Serialize each header
   headers.iterate([&result](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
     auto key = std::string(header.key().getStringView());
-    // Ignore key starting with ":" (e.g: ":status")
+    // Ignore key starting with ":" (e.g: ":authority", ":path", ":status")
     if (key.starts_with(":")) {
       return Http::HeaderMap::Iterate::Continue;
     }
@@ -293,8 +298,8 @@ std::string SnortHttpFilter::serializeResponseHeaders(const Http::ResponseHeader
 
 Buffer::OwnedImpl
 SnortHttpFilter::createPacket(Buffer::Instance& data,
-                              Network::Address::InstanceConstSharedPtr& source_address,
-                              Network::Address::InstanceConstSharedPtr& destination_address) {
+                              const Network::Address::InstanceConstSharedPtr& source_address,
+                              const Network::Address::InstanceConstSharedPtr& destination_address) {
   // Payload
   uint8_t* payload = static_cast<uint8_t*>(data.linearize(data.length()));
   size_t payload_length = data.length();
@@ -365,7 +370,7 @@ SnortHttpFilter::createPacket(Buffer::Instance& data,
 }
 
 // Function to calculate checksum
-uint16_t SnortHttpFilter::checksum(uint16_t* buf, size_t nwords) {
+uint16_t SnortHttpFilter::checksum(const uint16_t* buf, size_t nwords) {
   uint64_t sum;
   for (sum = 0; nwords > 0; nwords--)
     sum += *buf++;
