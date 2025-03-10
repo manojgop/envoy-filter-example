@@ -1,0 +1,72 @@
+admin:
+  access_log_path: /dev/stdout
+  address:
+    socket_address:
+      address: 127.0.0.1
+      port_value: 10001
+static_resources:
+  listeners:
+  - address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 10000
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          codec_type: AUTO
+          stat_prefix: ingress_http
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: app
+              domains:
+              - "*"
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  cluster: service-http
+          http_filters:
+          - name: snorthttp
+            typed_config:
+              "@type": type.googleapis.com/snort.SnortHttpConfig
+              stat_prefix: log
+              action: ALLOW
+              remote_ip:
+                address_prefix: 127.0.0.1
+                prefix_len: 32
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+      transport_socket:
+        name: envoy.transport_sockets.tap
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tap.v3.Tap
+          common_config:
+            static_config:
+              match:
+                any_match: true
+              output_config:
+                sinks:
+                  - format: PROTO_TEXT
+                    file_per_tap:
+                      path_prefix: /home/manoj/envoy/envoy-filter-example/tap
+          transport_socket:
+            name: envoy.transport_sockets.raw_buffer
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer
+
+  clusters:
+  - name: service-http
+    connect_timeout: 5s
+    load_assignment:
+      cluster_name: service-http
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 5050

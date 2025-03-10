@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package snort;
+
+import "envoy/config/core/v3/address.proto";
+import "validate/validate.proto";
+
+message SnortHttpConfig {
+    string stat_prefix = 1 [(validate.rules).string = {min_len: 1}];
+    enum Action {
+        ALLOW = 0;
+        DENY = 1;
+    }
+    Action action = 2 [(validate.rules).enum = {defined_only: true}];
+    envoy.config.core.v3.CidrRange remote_ip = 3; // downstream client ip
+}
