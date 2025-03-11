@@ -3,7 +3,7 @@
 #include <string>
 
 #include "snort_http.h"
-
+#include "absl/status/statusor.h"
 #include "snort-http-filter/snorthttp.pb.h"
 #include "snort-http-filter/snorthttp.pb.validate.h"
 

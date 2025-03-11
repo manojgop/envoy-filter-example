@@ -41,8 +41,8 @@ envoy_cc_library(
 
 envoy_cc_library(
     name = "snort_lib",
-    srcs = ["snort_http.cc"],
-    hdrs = ["snort_http.h"],
+    srcs = ["snort_http.cc", "analyzer.cc"],
+    hdrs = ["snort_http.h", "analyzer.h"],
     repository = "@envoy",
     deps = [
         ":pkg_cc_proto",

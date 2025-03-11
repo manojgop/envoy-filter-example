@@ -1,13 +1,11 @@
 #pragma once
 
-#include "envoy/http/filter.h"
-#include "envoy/event/dispatcher.h"
-#include "envoy/event/timer.h"
+#include "analyzer.h"
 #include "envoy/buffer/buffer.h"
+#include "envoy/http/filter.h"
 #include "envoy/stats/stats_macros.h"
 #include "source/common/common/logger.h"
 #include "source/common/network/cidr_range.h"
-#include "source/common/buffer/buffer_impl.h"
 #include "snort-http-filter/snorthttp.pb.h"
 
 #include "source/extensions/filters/http/common/pass_through_filter.h"
@@ -74,6 +72,8 @@ private:
   StreamDecoderFilterCallbacks* decoder_callbacks_{};
   StreamEncoderFilterCallbacks* encoder_callbacks_{};
 
+  std::unique_ptr<Analyzer> analyzer_;
+
   Http::RequestHeaderMap* request_headers_;
   Buffer::OwnedImpl buffered_request_data_;
   Http::RequestTrailerMap* request_trailers_ = nullptr;
@@ -84,20 +84,7 @@ private:
 
   void analyzeRequest();
   void analyzeResponse();
-  bool performRequestAnalysis();
-  bool performResponseAnalysis();
-
-  std::string serializeRequestHeaders(const Http::RequestHeaderMap& headers);
-  std::string serializeResponseHeaders(const Envoy::Http::ResponseHeaderMap& headers);
-  std::string serializeRequestTrailers(const Http::RequestTrailerMap& trailers);
-  std::string serializeResponseTrailers(const Http::ResponseTrailerMap& trailers);
-  std::string serializeHeaders(const Http::HeaderMap& headers);
-  Buffer::OwnedImpl
-  createPacket(Buffer::Instance& data,
-               const Network::Address::InstanceConstSharedPtr& source_address,
-               const Network::Address::InstanceConstSharedPtr& destination_address);
-  uint16_t checksum(const uint16_t* buf, size_t nwords);
-  bool checkIP(const std::string& ip);
+  bool isAllowedIP(const std::string& ip);
 };
 
 } // namespace Http
