@@ -1,0 +1,14 @@
+{
+  "data": [
+    {"id": 1, "name": "Item 1", "description": "A long description for item 1 with some extra details to add length to the JSON string.", "category": "Electronics", "price": 19.99, "stock": 10},
+    {"id": 2, "name": "Item 2", "description": "Another lengthy description for item 2 including more descriptive text to reach the desired byte size.", "category": "Clothing", "price": 39.99, "stock": 5},
+    {"id": 3, "name": "Item 3", "description": "A detailed explanation regarding item 3 with extra information to further expand the JSON size.", "category": "Home Goods", "price": 25.99, "stock": 15},
+    {"id": 4, "name": "Item 4", "description": "A longer description for item 4 with added text to ensure the target byte size is met.", "category": "Sports", "price": 12.99, "stock": 20},
+    {"id": 5, "name": "Item 5", "description": "Detailed information about item 5, including additional text to reach the desired byte length.", "category": "Kitchenware", "price": 15.99, "stock": 8},
+    {"id": 6, "name": "Item 6", "description": "A longer description for item 6 with extra details to expand the JSON size.", "category": "Toys", "price": 9.99, "stock": 12},
+    {"id": 7, "name": "Item 7", "description": "A lengthy description for item 7 to reach the target byte size.", "category": "Beauty", "price": 29.99, "stock": 7},
+    {"id": 8, "name": "Item 8", "description": "An extended description for item 8 to further increase the JSON size.", "category": "Office Supplies", "price": 10.99, "stock": 18},
+    {"id": 9, "name": "Item 9", "description": "A detailed explanation regarding item 9 with extra information to expand the JSON size.", "category": "Electronics", "price": 35.99, "stock": 10},
+    {"id": 10, "name": "Item 10", "description": "A longer description for item 10 with added text to ensure the target byte size is met.", "category": "Clothing", "price": 22.99, "stock": 5}
+  ]
+}

@@ -72,18 +72,30 @@ private:
   StreamDecoderFilterCallbacks* decoder_callbacks_{};
   StreamEncoderFilterCallbacks* encoder_callbacks_{};
 
-  std::unique_ptr<Analyzer> analyzer_;
+  std::unique_ptr<RequestAnalyzer> request_analyzer_;
+  std::unique_ptr<ResponseAnalyzer> response_analyzer_;
 
-  Http::RequestHeaderMap* request_headers_;
+  Http::RequestHeaderMap* request_headers_ = nullptr;
   Buffer::OwnedImpl buffered_request_data_;
   Http::RequestTrailerMap* request_trailers_ = nullptr;
 
-  Http::ResponseHeaderMap* response_headers_;
+  Http::ResponseHeaderMap* response_headers_ = nullptr;
   Buffer::OwnedImpl buffered_response_data_;
   Http::ResponseTrailerMap* response_trailers_ = nullptr;
 
-  void analyzeRequest();
-  void analyzeResponse();
+  uint64_t processed_request_length_ = 0;
+  uint64_t processed_response_length_ = 0;
+  const size_t threshold_ = 1024;
+
+  void analyzeRequest(bool end_stream);
+  void analyzeResponse(bool end_stream);
+
+  bool processData(const Envoy::Buffer::Instance& buffer, uint64_t& processed_length,
+                   uint64_t threshold, bool end_stream, bool is_request);
+  bool processBufferedData(const Envoy::Buffer::Instance& buffer, size_t start_offset,
+                           size_t length, bool is_request);
+  bool processRequest(const uint8_t* data, size_t size);
+  bool processResponse(const uint8_t* data, size_t size);
   bool isAllowedIP(const std::string& ip);
 };
 

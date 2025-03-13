@@ -28,38 +28,32 @@ public:
    */
   std::string serializeHeaders(const Http::HeaderMap& headers);
 
+  uint64_t getSeq() const { return seq_; }
+  uint64_t getAck() const { return ack_; }
+  void setSeq(uint64_t seq) { seq_ = seq; }
+  void setAck(uint64_t ack) { ack_ = ack; }
+
 private:
+  uint64_t seq_ = 0;
+  uint64_t ack_ = 0;
+
   uint16_t checksum(const uint16_t* buf, size_t nwords);
 };
 
 class RequestAnalyzer : public virtual BaseAnalyzer {
 public:
-  virtual bool analyzeRequest(const Buffer::Instance&, const Http::RequestHeaderMap*,
-                              const Http::RequestTrailerMap*, const Network::Connection&) {
-    return true;
-  }
+  virtual bool analyzeRequest(const uint8_t* data, size_t size, const Http::RequestHeaderMap*,
+                              const Http::RequestTrailerMap*, const Network::Connection&);
   std::string serializeRequestHeaders(const Http::RequestHeaderMap& headers);
   std::string serializeRequestTrailers(const Http::RequestTrailerMap& trailers);
 };
 
 class ResponseAnalyzer : public virtual BaseAnalyzer {
 public:
-  virtual bool analyzeResponse(const Buffer::Instance&, const Http::ResponseHeaderMap*,
-                               const Http::ResponseTrailerMap*, const Network::Connection&) {
-    return true;
-  }
+  virtual bool analyzeResponse(const uint8_t* data, size_t size, const Http::ResponseHeaderMap*,
+                               const Http::ResponseTrailerMap*, const Network::Connection&);
   std::string serializeResponseHeaders(const Envoy::Http::ResponseHeaderMap& headers);
   std::string serializeResponseTrailers(const Http::ResponseTrailerMap& trailers);
-};
-
-class Analyzer : public RequestAnalyzer, public ResponseAnalyzer {
-public:
-  bool analyzeRequest(const Buffer::Instance& data, const Http::RequestHeaderMap* headers,
-                      const Http::RequestTrailerMap* trailers,
-                      const Network::Connection& connection) override;
-  bool analyzeResponse(const Buffer::Instance& data, const Http::ResponseHeaderMap* headers,
-                       const Http::ResponseTrailerMap* trailers,
-                       const Network::Connection& connection) override;
 };
 
 } // namespace Http

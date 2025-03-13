@@ -38,10 +38,10 @@ BaseAnalyzer::createPacket(const void* data, uint64_t size,
   const uint8_t* payload = static_cast<const uint8_t*>(data);
   uint64_t payload_length = size;
 
-  // Construct Ethernet header
+  // Construct Ethernet header. This might not be required for Snort for analysis.
   struct ether_header eth_header;
   memset(&eth_header, 0, sizeof(eth_header));
-  // Set source and destination MAC addresses (example values)
+  // Set source and destination MAC addresses (dummy values)
   memcpy(eth_header.ether_shost, "\x0a\x02\x02\x02\x02\x01", ETH_ALEN);
   memcpy(eth_header.ether_dhost, "\x0a\x02\x02\x02\x02\x02", ETH_ALEN);
   eth_header.ether_type = htons(ETHERTYPE_IP);
@@ -57,21 +57,20 @@ BaseAnalyzer::createPacket(const void* data, uint64_t size,
   ip_hdr.ip_len = htons(sizeof(struct ip) + sizeof(struct tcphdr) + payload_length);
   ip_hdr.ip_src.s_addr = inet_addr(source_address->ip()->addressAsString().c_str());
   ip_hdr.ip_dst.s_addr = inet_addr(destination_address->ip()->addressAsString().c_str());
-  ip_hdr.ip_sum = checksum(reinterpret_cast<uint16_t *>(&ip_hdr), sizeof(struct ip) / 2);
+  ip_hdr.ip_sum = checksum(reinterpret_cast<uint16_t*>(&ip_hdr), sizeof(struct ip) / 2);
 
   // Construct TCP header
   struct tcphdr tcp_hdr;
   memset(&tcp_hdr, 0, sizeof(tcp_hdr));
-  tcp_hdr.th_off = 5;           // Data offset
-  tcp_hdr.th_flags = TH_ACK;    // TH_ACK
+  tcp_hdr.th_off = 5; // Data offset
+  tcp_hdr.th_flags = TH_PUSH | TH_ACK;
   tcp_hdr.th_win = htons(8192); // Window size
   tcp_hdr.th_sport = htons(source_address->ip()->port());
   tcp_hdr.th_dport = htons(destination_address->ip()->port());
 
-  static uint32_t ack = 0;
-  tcp_hdr.th_seq = htonl(0);
-  tcp_hdr.th_ack = htonl(ack);
-  ack = payload_length;
+  tcp_hdr.th_seq = htonl(seq_);
+  tcp_hdr.th_ack = htonl(ack_);
+  seq_ += payload_length; // Increment sequence number by payload length
   tcp_hdr.th_sum = 0;
   tcp_hdr.th_urp = 0;
 
@@ -84,12 +83,12 @@ BaseAnalyzer::createPacket(const void* data, uint64_t size,
   unsigned short tcp_len = htons(sizeof(struct tcphdr) + payload_length);
   memcpy(pseudo_header + 10, &tcp_len, 2);
 
-  uint8_t *tcp_segment = new uint8_t[12 + sizeof(struct tcphdr) + payload_length];
+  uint8_t* tcp_segment = new uint8_t[12 + sizeof(struct tcphdr) + payload_length];
   memcpy(tcp_segment, pseudo_header, 12);
   memcpy(tcp_segment + 12, &tcp_hdr, sizeof(struct tcphdr));
   memcpy(tcp_segment + 12 + sizeof(struct tcphdr), payload, payload_length);
 
-  tcp_hdr.th_sum = checksum(reinterpret_cast<uint16_t *>(tcp_segment),
+  tcp_hdr.th_sum = checksum(reinterpret_cast<uint16_t*>(tcp_segment),
                             (12 + sizeof(struct tcphdr) + payload_length) / 2);
 
   delete[] tcp_segment;
@@ -169,18 +168,19 @@ std::string ResponseAnalyzer::serializeResponseTrailers(const Http::ResponseTrai
   return serializeHeaders(trailers);
 }
 
-// Analyzer
-bool Analyzer::analyzeRequest(const Buffer::Instance& data, const Http::RequestHeaderMap* headers,
-                              const Http::RequestTrailerMap* trailers,
-                              const Network::Connection& connection) {
+// Request Analyzer
+bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
+                                     const Http::RequestHeaderMap* headers,
+                                     const Http::RequestTrailerMap* trailers,
+                                     const Network::Connection& connection) {
 
   Buffer::OwnedImpl buffer;
   if (headers) {
     std::string s = serializeRequestHeaders(*headers);
     buffer.add(s);
   }
-  if (data.length() > 0) {
-    buffer.add(data);
+  if (data != nullptr && size > 0) {
+    buffer.add(data, size);
   }
   if (trailers) {
     std::string s = serializeRequestTrailers(*trailers);
@@ -201,17 +201,19 @@ bool Analyzer::analyzeRequest(const Buffer::Instance& data, const Http::RequestH
   return true;
 }
 
-bool Analyzer::analyzeResponse(const Buffer::Instance& data, const Http::ResponseHeaderMap* headers,
-                               const Http::ResponseTrailerMap* trailers,
-                               const Network::Connection& connection) {
+// ResponseAnalyzer
+bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
+                                       const Http::ResponseHeaderMap* headers,
+                                       const Http::ResponseTrailerMap* trailers,
+                                       const Network::Connection& connection) {
 
   Buffer::OwnedImpl buffer;
   if (headers) {
     std::string s = serializeResponseHeaders(*headers);
     buffer.add(s);
   }
-  if (data.length() > 0) {
-    buffer.add(data);
+  if (data != nullptr && size > 0) {
+    buffer.add(data, size);
   }
   if (trailers) {
     std::string s = serializeResponseTrailers(*trailers);
