@@ -22,7 +22,7 @@ static_resources:
             virtual_hosts:
             - name: app
               domains:
-              - "example.com"
+              - "strata.net"
               routes:
               - match:
                   prefix: "/"

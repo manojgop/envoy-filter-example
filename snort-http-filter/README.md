@@ -34,9 +34,9 @@ Envoy binary as a new filter.
 3. Execute following commands in terminal 2. Replace `143.182.136.128` with IP address of your
    n/w interface.
 
-   `curl --proxy-insecure -x https://127.0.0.1:10000 http://example.com?secretkey=val/ -v`
+   `curl --proxy-insecure -x https://127.0.0.1:10000 http://strata.net?secretkey=val/ -v`
 
-   `curl --proxy-insecure -x https://143.182.136.128:10000 http://example.com?secretkey=val/ -v`
+   `curl --proxy-insecure -x https://143.182.136.128:10000 http://strata.net?secretkey=val/ -v`
 
 4. Check stats. Execute following command in terminal 2
 
