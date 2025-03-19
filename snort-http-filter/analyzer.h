@@ -37,7 +37,7 @@ private:
   uint64_t seq_ = 0;
   uint64_t ack_ = 0;
 
-  uint16_t checksum(const uint16_t* buf, size_t nwords);
+  uint16_t checksum(const uint16_t* buf, int len);
 };
 
 class RequestAnalyzer : public virtual BaseAnalyzer {

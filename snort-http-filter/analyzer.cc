@@ -57,7 +57,7 @@ BaseAnalyzer::createPacket(const void* data, uint64_t size,
   ip_hdr.ip_len = htons(sizeof(struct ip) + sizeof(struct tcphdr) + payload_length);
   ip_hdr.ip_src.s_addr = inet_addr(source_address->ip()->addressAsString().c_str());
   ip_hdr.ip_dst.s_addr = inet_addr(destination_address->ip()->addressAsString().c_str());
-  ip_hdr.ip_sum = checksum(reinterpret_cast<uint16_t*>(&ip_hdr), sizeof(struct ip) / 2);
+  ip_hdr.ip_sum = checksum(reinterpret_cast<uint16_t*>(&ip_hdr), sizeof(struct ip));
 
   // Construct TCP header
   struct tcphdr tcp_hdr;
@@ -80,7 +80,7 @@ BaseAnalyzer::createPacket(const void* data, uint64_t size,
   memcpy(pseudo_header + 4, &ip_hdr.ip_dst.s_addr, 4);
   pseudo_header[8] = 0;
   pseudo_header[9] = ip_hdr.ip_p;
-  unsigned short tcp_len = htons(sizeof(struct tcphdr) + payload_length);
+  uint16_t tcp_len = htons(sizeof(struct tcphdr) + payload_length);
   memcpy(pseudo_header + 10, &tcp_len, 2);
 
   uint8_t* tcp_segment = new uint8_t[12 + sizeof(struct tcphdr) + payload_length];
@@ -89,7 +89,7 @@ BaseAnalyzer::createPacket(const void* data, uint64_t size,
   memcpy(tcp_segment + 12 + sizeof(struct tcphdr), payload, payload_length);
 
   tcp_hdr.th_sum = checksum(reinterpret_cast<uint16_t*>(tcp_segment),
-                            (12 + sizeof(struct tcphdr) + payload_length) / 2);
+                            (12 + sizeof(struct tcphdr) + payload_length));
 
   delete[] tcp_segment;
 
@@ -104,13 +104,26 @@ BaseAnalyzer::createPacket(const void* data, uint64_t size,
 }
 
 // Calculate checksum
-uint16_t BaseAnalyzer::checksum(const uint16_t* buf, size_t nwords) {
-  uint64_t sum;
-  for (sum = 0; nwords > 0; nwords--)
+uint16_t BaseAnalyzer::checksum(const uint16_t* buf, int len) {
+  int nleft = len;
+  uint32_t sum = 0; // Use uint32_t to handle overflow
+
+  // Sum all 16-bit words
+  while (nleft > 1) {
     sum += *buf++;
+    nleft -= 2;
+  }
+
+  // If there's a leftover byte, add it
+  if (nleft == 1) {
+    sum += *(reinterpret_cast<const uint8_t*>(buf)); // Cast to uint8_t to get the last byte
+  }
+
+  // Fold 32-bit sum to 16 bits
   sum = (sum >> 16) + (sum & 0xffff);
   sum += (sum >> 16);
-  return static_cast<uint16_t>(~sum);
+
+  return ~sum;
 }
 
 // Request Analyzer

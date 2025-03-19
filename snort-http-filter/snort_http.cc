@@ -286,9 +286,10 @@ bool SnortHttpFilter::processResponse(const uint8_t* data, size_t size) {
 
 bool SnortHttpFilter::isAllowedIP(const std::string& ip) {
   bool match = true;
+  bool allow = true;
   if (config_->remoteIP() != nullptr) {
     const std::string& config_remote_ip = config_->remoteIP()->ip()->addressAsString();
-    ENVOY_LOG(trace, "snort http: config remote IP : {}, dowonstream remote IP : {}",
+    ENVOY_LOG(trace, "snort http: config remote IP : {}, downstream remote IP : {}",
               config_remote_ip, ip);
     if (config_remote_ip != ip) {
       match = false;
@@ -297,9 +298,9 @@ bool SnortHttpFilter::isAllowedIP(const std::string& ip) {
   if ((match && config_->action() == snort::SnortHttpConfig_Action_DENY) ||
       (!match && config_->action() == snort::SnortHttpConfig_Action_ALLOW)) {
     ENVOY_LOG(trace, "snort http: Denied connection from/to downstream remote IP : {}", ip);
-    match = false;
+    allow = false;
   }
-  return match;
+  return allow;
 }
 
 } // namespace Http
