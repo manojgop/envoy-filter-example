@@ -31,11 +31,12 @@ api_proto_package(
 
 envoy_cc_library(
     name = "pcap_lib",
-    srcs = ["pcap_file_manager.cc"],
-    hdrs = ["pcap_file_manager.h"],
+    srcs = ["pcap_file_manager.cc", "daq_manager.cc"],
+    hdrs = ["pcap_file_manager.h", "daq_manager.h"],
     repository = "@envoy",
     deps = [
         "//snort-filter/libpcap:libpcap",
+        "@envoy//source/common/common:logger_lib",
     ],
 )
 

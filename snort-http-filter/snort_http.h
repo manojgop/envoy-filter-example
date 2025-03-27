@@ -85,7 +85,7 @@ private:
 
   uint64_t processed_request_length_ = 0;
   uint64_t processed_response_length_ = 0;
-  const size_t threshold_ = 1024;
+  const size_t kThreshold = 1024;
 
   void analyzeRequest(bool end_stream);
   void analyzeResponse(bool end_stream);

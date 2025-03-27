@@ -31,6 +31,7 @@ SnortHttpFilterConfig::getRemoteIP(const snort::SnortHttpConfig& proto_config) {
 
 // Snort Http Filter
 SnortHttpFilter::SnortHttpFilter(SnortHttpFilterConfigSharedPtr config) : config_(config) {
+  ENVOY_LOG(trace, "snort http filter created");
 
   processed_request_length_ = 0;
   processed_response_length_ = 0;
@@ -128,7 +129,7 @@ void SnortHttpFilter::analyzeRequest(bool end_stream) {
   // If there is buffered http body, process it.
   // This will process headers/trailers along with http body.
   if (buffered_request_data_.length() > 0) {
-    result = processData(buffered_request_data_, processed_request_length_, threshold_, end_stream,
+    result = processData(buffered_request_data_, processed_request_length_, kThreshold, end_stream,
                          true);
   }
 
@@ -158,7 +159,7 @@ void SnortHttpFilter::analyzeResponse(bool end_stream) {
   // If there is buffered http body process it.
   // This will process headers/trailers along with http body.
   if (buffered_response_data_.length() > 0) {
-    result = processData(buffered_response_data_, processed_response_length_, threshold_,
+    result = processData(buffered_response_data_, processed_response_length_, kThreshold,
                          end_stream, false);
   }
 
@@ -259,7 +260,7 @@ bool SnortHttpFilter::processRequest(const uint8_t* data, size_t size) {
     auto& connection = decoder_callbacks_->connection().ref();
     auto source_address = connection.connectionInfoProvider().directRemoteAddress();
     auto ip = source_address->ip()->addressAsString();
-    allow = isAllowedIP(ip);
+    allow = allow & isAllowedIP(ip);
   }
 
   // Request header and trailer is processed. Set it to nullptr.

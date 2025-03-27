@@ -1,5 +1,6 @@
 #pragma once
 
+#include "daq_manager.h"
 #include "envoy/buffer/buffer.h"
 #include "envoy/network/connection.h"
 #include "snort-http-filter/snorthttp.pb.h"
@@ -12,7 +13,7 @@ namespace Http {
  */
 class BaseAnalyzer : public Logger::Loggable<Logger::Id::filter> {
 public:
-  BaseAnalyzer() = default;
+  BaseAnalyzer();
   virtual ~BaseAnalyzer() = default;
 
   /**
@@ -32,6 +33,9 @@ public:
   uint64_t getAck() const { return ack_; }
   void setSeq(uint64_t seq) { seq_ = seq; }
   void setAck(uint64_t ack) { ack_ = ack; }
+
+protected:
+  std::unique_ptr<DaqManager> daq_;
 
 private:
   uint64_t seq_ = 0;

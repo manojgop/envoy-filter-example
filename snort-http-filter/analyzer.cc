@@ -1,5 +1,6 @@
 #include "analyzer.h"
 #include "pcap_file_manager.h"
+#include "source/common/common/logger.h"
 #include "source/common/http/codes.h"
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -10,6 +11,10 @@ namespace Envoy {
 namespace Http {
 
 // BaseAnalyzer
+BaseAnalyzer::BaseAnalyzer() {
+  daq_ = std::make_unique<DaqManager>();
+}
+
 std::string BaseAnalyzer::serializeHeaders(const Http::HeaderMap& headers) {
   std::string result;
 
@@ -211,7 +216,21 @@ bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
   PcapFileManager::getInstance().writeToPcap(
       static_cast<const uint8_t*>(packet.linearize(packet.length())), packet.length());
 
-  return true;
+  // Send packet to snort DAQ for analysis
+  bool status = daq_->sendPacketToDaq(
+      static_cast<const uint8_t*>(packet.linearize(packet.length())), packet.length());
+
+  if (status) {
+    status = daq_->getVerdictFromDaq();
+    if (status) {
+      ENVOY_LOG(trace, "Verdict passed");
+    } else {
+      ENVOY_LOG(trace, "Verdict failed");
+    }
+  } else {
+    ENVOY_LOG(trace, "Sending packet to Snort DAQ failed");
+  }
+  return status;
 }
 
 // ResponseAnalyzer
