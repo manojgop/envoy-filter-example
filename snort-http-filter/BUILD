@@ -59,7 +59,6 @@ envoy_cc_library(
         "@envoy//source/common/common:logger_lib",
         "@envoy//source/common/http:codes_lib",
         "@envoy//source/common/event:dispatcher_lib",
-        "@envoy//source/common/network:cidr_range_lib",
         "@envoy//source/extensions/filters/http/common:pass_through_filter_lib",
 
     ],

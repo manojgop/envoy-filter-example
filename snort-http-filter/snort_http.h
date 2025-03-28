@@ -5,7 +5,6 @@
 #include "envoy/http/filter.h"
 #include "envoy/stats/stats_macros.h"
 #include "source/common/common/logger.h"
-#include "source/common/network/cidr_range.h"
 #include "snort-http-filter/snorthttp.pb.h"
 
 #include "source/extensions/filters/http/common/pass_through_filter.h"
@@ -31,24 +30,24 @@ struct SnortHttpStats {
   ALL_SNORT_HTTP_STATS(GENERATE_COUNTER_STRUCT)
 };
 
-using CidrRange = Envoy::Network::Address::CidrRange;
-
 class SnortHttpFilterConfig {
 public:
   SnortHttpFilterConfig(const snort::SnortHttpConfig& proto_config, Stats::Scope& scope);
 
   const std::string& statPrefix() const { return stat_prefix_; }
   SnortHttpStats& stats() { return stats_; }
-  const snort::SnortHttpConfig_Action& action() { return action_; }
-  const std::unique_ptr<const CidrRange>& remoteIP() { return remote_ip_; }
+  bool savePcapField() const { return save_pcap_; }
+  bool analyseRequestField() const { return analyze_request_; }
+  bool analyseResponseField() const { return analyze_response_; }
 
 private:
   const std::string stat_prefix_;
   SnortHttpStats stats_;
-  const snort::SnortHttpConfig_Action action_;
-  const std::unique_ptr<const CidrRange> remote_ip_;
+  const bool save_pcap_;
+  const bool analyze_request_;
+  const bool analyze_response_;
   static SnortHttpStats generateStats(const std::string& prefix, Stats::Scope& scope);
-  static std::unique_ptr<CidrRange> getRemoteIP(const snort::SnortHttpConfig& proto_config);
+  static bool getAnalyzeRequest(const snort::SnortHttpConfig& proto_config);
 };
 
 using SnortHttpFilterConfigSharedPtr = std::shared_ptr<SnortHttpFilterConfig>;
@@ -96,7 +95,6 @@ private:
                            size_t length, bool is_request);
   bool processRequest(const uint8_t* data, size_t size);
   bool processResponse(const uint8_t* data, size_t size);
-  bool isAllowedIP(const std::string& ip);
 };
 
 } // namespace Http

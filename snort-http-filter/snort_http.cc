@@ -8,8 +8,9 @@ namespace Http {
 SnortHttpFilterConfig::SnortHttpFilterConfig(const snort::SnortHttpConfig& proto_config,
                                              Stats::Scope& scope)
     : stat_prefix_(proto_config.stat_prefix()),
-      stats_(generateStats(proto_config.stat_prefix(), scope)), action_(proto_config.action()),
-      remote_ip_(getRemoteIP(proto_config)) {}
+      stats_(generateStats(proto_config.stat_prefix(), scope)),
+      save_pcap_(proto_config.save_pcap()), analyze_request_(getAnalyzeRequest(proto_config)),
+      analyze_response_(proto_config.analyze_response()) {}
 
 SnortHttpStats SnortHttpFilterConfig::generateStats(const std::string& prefix,
                                                     Stats::Scope& scope) {
@@ -17,16 +18,12 @@ SnortHttpStats SnortHttpFilterConfig::generateStats(const std::string& prefix,
   return {ALL_SNORT_HTTP_STATS(POOL_COUNTER_PREFIX(scope, final_prefix))};
 }
 
-std::unique_ptr<CidrRange>
-SnortHttpFilterConfig::getRemoteIP(const snort::SnortHttpConfig& proto_config) {
-  if (proto_config.has_remote_ip()) {
-    absl::StatusOr<CidrRange> remote_ip_or_error = CidrRange::create(proto_config.remote_ip());
-    if (!remote_ip_or_error.ok()) {
-      return nullptr;
-    }
-    return std::make_unique<CidrRange>(std::move(remote_ip_or_error.value()));
+bool SnortHttpFilterConfig::getAnalyzeRequest(const snort::SnortHttpConfig& proto_config) {
+  // Analyze request is enabled by default if the field is not set
+  if (!proto_config.has_analyze_request()) {
+    return true;
   }
-  return nullptr;
+  return proto_config.analyze_request();
 }
 
 // Snort Http Filter
@@ -35,8 +32,10 @@ SnortHttpFilter::SnortHttpFilter(SnortHttpFilterConfigSharedPtr config) : config
 
   processed_request_length_ = 0;
   processed_response_length_ = 0;
-  request_analyzer_ = std::make_unique<RequestAnalyzer>();
-  response_analyzer_ = std::make_unique<ResponseAnalyzer>();
+  request_analyzer_ =
+      std::make_unique<RequestAnalyzer>(config_->savePcapField(), config_->analyseRequestField());
+  response_analyzer_ =
+      std::make_unique<ResponseAnalyzer>(config_->savePcapField(), config_->analyseResponseField());
 }
 
 FilterHeadersStatus SnortHttpFilter::decodeHeaders(Http::RequestHeaderMap& headers,
@@ -254,15 +253,6 @@ bool SnortHttpFilter::processRequest(const uint8_t* data, size_t size) {
   bool allow = request_analyzer_->analyzeRequest(data, size, request_headers_, request_trailers_,
                                                  decoder_callbacks_->connection().ref());
 
-  if (request_headers_) {
-    // Check if remote IP is allowed based on filter configuration.
-    // Note: This check is temporary. Added to test filter configuration. Will be removed later.
-    auto& connection = decoder_callbacks_->connection().ref();
-    auto source_address = connection.connectionInfoProvider().directRemoteAddress();
-    auto ip = source_address->ip()->addressAsString();
-    allow = allow & isAllowedIP(ip);
-  }
-
   // Request header and trailer is processed. Set it to nullptr.
   request_headers_ = nullptr;
   request_trailers_ = nullptr;
@@ -282,25 +272,6 @@ bool SnortHttpFilter::processResponse(const uint8_t* data, size_t size) {
   response_headers_ = nullptr;
   response_trailers_ = nullptr;
 
-  return allow;
-}
-
-bool SnortHttpFilter::isAllowedIP(const std::string& ip) {
-  bool match = true;
-  bool allow = true;
-  if (config_->remoteIP() != nullptr) {
-    const std::string& config_remote_ip = config_->remoteIP()->ip()->addressAsString();
-    ENVOY_LOG(trace, "snort http: config remote IP : {}, downstream remote IP : {}",
-              config_remote_ip, ip);
-    if (config_remote_ip != ip) {
-      match = false;
-    }
-  }
-  if ((match && config_->action() == snort::SnortHttpConfig_Action_DENY) ||
-      (!match && config_->action() == snort::SnortHttpConfig_Action_ALLOW)) {
-    ENVOY_LOG(trace, "snort http: Denied connection from/to downstream remote IP : {}", ip);
-    allow = false;
-  }
   return allow;
 }
 

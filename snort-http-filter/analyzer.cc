@@ -11,9 +11,7 @@ namespace Envoy {
 namespace Http {
 
 // BaseAnalyzer
-BaseAnalyzer::BaseAnalyzer() {
-  daq_ = std::make_unique<DaqManager>();
-}
+BaseAnalyzer::BaseAnalyzer() { daq_ = std::make_unique<DaqManager>(); }
 
 std::string BaseAnalyzer::serializeHeaders(const Http::HeaderMap& headers) {
   std::string result;
@@ -132,6 +130,9 @@ uint16_t BaseAnalyzer::checksum(const uint16_t* buf, int len) {
 }
 
 // Request Analyzer
+RequestAnalyzer::RequestAnalyzer(bool enable_save_pcap, bool enable_analyze)
+    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze) {}
+
 std::string RequestAnalyzer::serializeRequestHeaders(const Http::RequestHeaderMap& headers) {
   std::string result;
 
@@ -165,6 +166,9 @@ std::string RequestAnalyzer::serializeRequestTrailers(const Http::RequestTrailer
 }
 
 // Response Analyzer
+ResponseAnalyzer::ResponseAnalyzer(bool enable_save_pcap, bool enable_analyze)
+    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze) {}
+
 std::string ResponseAnalyzer::serializeResponseHeaders(const Http::ResponseHeaderMap& headers) {
   std::string result;
 
@@ -213,8 +217,15 @@ bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
                                           source_address, destination_address);
 
   // Write packet to PCAP file
-  PcapFileManager::getInstance().writeToPcap(
-      static_cast<const uint8_t*>(packet.linearize(packet.length())), packet.length());
+  if (enable_save_pcap_) {
+    PcapFileManager::getInstance().writeToPcap(
+        static_cast<const uint8_t*>(packet.linearize(packet.length())), packet.length());
+  }
+
+  // If analysis using snort is disabled return true.
+  if (!enable_analyze_) {
+    return true;
+  }
 
   // Send packet to snort DAQ for analysis
   bool status = daq_->sendPacketToDaq(
@@ -223,12 +234,12 @@ bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
   if (status) {
     status = daq_->getVerdictFromDaq();
     if (status) {
-      ENVOY_LOG(trace, "Verdict passed");
+      ENVOY_LOG(trace, "Verdict passed for request");
     } else {
-      ENVOY_LOG(trace, "Verdict failed");
+      ENVOY_LOG(trace, "Verdict failed for request");
     }
   } else {
-    ENVOY_LOG(trace, "Sending packet to Snort DAQ failed");
+    ENVOY_LOG(trace, "Sending request packet to Snort DAQ failed");
   }
   return status;
 }
@@ -260,10 +271,31 @@ bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
                                           source_address, destination_address);
 
   // Write packet to PCAP file
-  PcapFileManager::getInstance().writeToPcap(
+  if (enable_save_pcap_) {
+    PcapFileManager::getInstance().writeToPcap(
+        static_cast<const uint8_t*>(packet.linearize(packet.length())), packet.length());
+  }
+
+  // If analysis using snort is disabled return true.
+  if (!enable_analyze_) {
+    return true;
+  }
+
+  // Send packet to snort DAQ for analysis
+  bool status = daq_->sendPacketToDaq(
       static_cast<const uint8_t*>(packet.linearize(packet.length())), packet.length());
 
-  return true;
+  if (status) {
+    status = daq_->getVerdictFromDaq();
+    if (status) {
+      ENVOY_LOG(trace, "Verdict passed for response");
+    } else {
+      ENVOY_LOG(trace, "Verdict failed for response");
+    }
+  } else {
+    ENVOY_LOG(trace, "Sending response packet to Snort DAQ failed");
+  }
+  return status;
 }
 
 } // namespace Http

@@ -46,18 +46,28 @@ private:
 
 class RequestAnalyzer : public virtual BaseAnalyzer {
 public:
+  RequestAnalyzer(bool enable_save_pcap, bool enable_analyze);
   virtual bool analyzeRequest(const uint8_t* data, size_t size, const Http::RequestHeaderMap*,
                               const Http::RequestTrailerMap*, const Network::Connection&);
   std::string serializeRequestHeaders(const Http::RequestHeaderMap& headers);
   std::string serializeRequestTrailers(const Http::RequestTrailerMap& trailers);
+
+private:
+  const bool enable_save_pcap_;
+  const bool enable_analyze_;
 };
 
 class ResponseAnalyzer : public virtual BaseAnalyzer {
 public:
+  ResponseAnalyzer(bool enable_save_pcap, bool enable_analyze);
   virtual bool analyzeResponse(const uint8_t* data, size_t size, const Http::ResponseHeaderMap*,
                                const Http::ResponseTrailerMap*, const Network::Connection&);
   std::string serializeResponseHeaders(const Envoy::Http::ResponseHeaderMap& headers);
   std::string serializeResponseTrailers(const Http::ResponseTrailerMap& trailers);
+
+private:
+  const bool enable_save_pcap_;
+  const bool enable_analyze_;
 };
 
 } // namespace Http

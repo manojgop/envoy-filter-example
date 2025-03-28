@@ -21,7 +21,7 @@ if [ $? -eq 0 ]; then
     fi
 
     # Run the Docker container with port binding
-    docker run --name $CONTAINER_NAME -d -p 5000:5000 $IMAGE_NAME
+    docker run --name $CONTAINER_NAME -d -p 5000:80 $IMAGE_NAME
 
     # Check if the container is running
     if [ $? -eq 0 ]; then

@@ -37,10 +37,9 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/snort.SnortHttpConfig
               stat_prefix: log
-              action: DENY
-              remote_ip:
-                address_prefix: 10.0.0.1
-                prefix_len: 32
+              save_pcap: true
+              analyze_request: true
+              analyze_response: false
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router          
