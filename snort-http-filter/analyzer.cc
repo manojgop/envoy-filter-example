@@ -2,16 +2,34 @@
 #include "pcap_file_manager.h"
 #include "source/common/common/logger.h"
 #include "source/common/http/codes.h"
+#include "envoy/common/random_generator.h"
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <net/ethernet.h>
 #include <arpa/inet.h>
+#include <random>
+#include <cstdint>
 
 namespace Envoy {
 namespace Http {
 
 // BaseAnalyzer
-BaseAnalyzer::BaseAnalyzer() { daq_ = std::make_unique<DaqManager>(); }
+BaseAnalyzer::BaseAnalyzer() {
+  seq_ = generateRandomNumber();
+  ack_ = 0;
+  daq_ = std::make_unique<DaqManager>();
+}
+
+uint32_t BaseAnalyzer::generateRandomNumber() {
+  std::random_device rd;
+  std::mt19937 generator(rd());
+  std::uniform_int_distribution<uint32_t> distribution(0, UINT32_MAX);
+
+  // Generate a random uint32_t number
+  uint32_t randomNumber = distribution(generator);
+
+  return randomNumber;
+}
 
 std::string BaseAnalyzer::serializeHeaders(const Http::HeaderMap& headers) {
   std::string result;

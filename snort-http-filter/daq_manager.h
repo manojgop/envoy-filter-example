@@ -1,7 +1,6 @@
 #pragma once
 
 #include "source/common/common/logger.h"
-#include <pcap.h>
 #include <string>
 #include <memory>
 
@@ -28,11 +27,6 @@ private:
     DAQ_ENVOY_MSG_TYPE_BPOOL = 3,
     DAQ_ENVOY_MSG_TYPE_QPAIR = 4,
     DAQ_ENVOY_MSG_TYPE_PACKET = 5,
-  };
-  struct DaqEnvoyMsgPkt {
-    DaqEnvoyMsgType msg_type;
-    struct pcap_pkthdr pcap_header;
-    uint8_t data[DAQ_MANAGER_MAX_DATA_SIZE];
   };
 
   // Should match DAQ_Verdict enum in https://github.com/snort3/libdaq/blob/master/api/daq_common.h

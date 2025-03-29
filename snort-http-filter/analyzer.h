@@ -38,10 +38,11 @@ protected:
   std::unique_ptr<DaqManager> daq_;
 
 private:
-  uint64_t seq_ = 0;
-  uint64_t ack_ = 0;
+  uint64_t seq_;
+  uint64_t ack_;
 
   uint16_t checksum(const uint16_t* buf, int len);
+  uint32_t generateRandomNumber();
 };
 
 class RequestAnalyzer : public virtual BaseAnalyzer {

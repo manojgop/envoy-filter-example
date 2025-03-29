@@ -6,6 +6,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pcap.h>
 
 namespace Envoy {
 namespace Http {
@@ -25,7 +26,7 @@ DaqManager::~DaqManager() {
 bool DaqManager::connectSocket() {
   unix_socket_fd_ = socket(AF_UNIX, SOCK_SEQPACKET, 0);
   if (unix_socket_fd_ < 0) {
-    ENVOY_LOG(error, "Snort DAQ manager: Unix socket creation failed: %s", strerror(errno));
+    ENVOY_LOG(error, "Snort DAQ manager: Unix socket creation failed: {}", strerror(errno));
     return false;
   }
   struct sockaddr_un server_addr;
@@ -35,7 +36,8 @@ bool DaqManager::connectSocket() {
 
   if (connect(unix_socket_fd_, reinterpret_cast<struct sockaddr*>(&server_addr),
               sizeof(server_addr)) < 0) {
-    ENVOY_LOG(error, "Snort DAQ manager: Connection to server failed: %s", strerror(errno));
+    ENVOY_LOG(error, "Snort DAQ manager: Connection to server failed on {} : {}", kUnixSocketPath,
+              strerror(errno));
     close(unix_socket_fd_);
     unix_socket_fd_ = -1;
     return false;
@@ -57,16 +59,21 @@ bool DaqManager::sendPacketToDaq(const uint8_t* data, size_t length) {
   auto duration = now.time_since_epoch();
   auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
 
-  DaqEnvoyMsgPkt msg;
-  msg.msg_type = DaqEnvoyMsgType::DAQ_ENVOY_MSG_TYPE_PACKET;
-  msg.pcap_header.ts.tv_sec = static_cast<int64_t>(microseconds / 1000000);
-  msg.pcap_header.ts.tv_usec = static_cast<int64_t>(microseconds % 1000000);
-  msg.pcap_header.caplen = length;
-  msg.pcap_header.len = length;
-  memcpy(&msg.data, data, std::max(length, static_cast<size_t>(DAQ_MANAGER_MAX_DATA_SIZE)));
+  struct pcap_pkthdr pcap_header;
+  pcap_header.ts.tv_sec = static_cast<int64_t>(microseconds / 1000000);
+  pcap_header.ts.tv_usec = static_cast<int64_t>(microseconds % 1000000);
+  pcap_header.caplen = length;
+  pcap_header.len = length;
 
-  if (send(unix_socket_fd_, &msg, sizeof(msg), 0) == -1) {
-    ENVOY_LOG(error, "Snort DAQ manager: Sending message failed: %s", strerror(errno));
+  // Send pcap header
+  if (send(unix_socket_fd_, &pcap_header, sizeof(pcap_header), 0) == -1) {
+    ENVOY_LOG(error, "Snort DAQ manager: Sending pcap header failed: {}", strerror(errno));
+    return false;
+  }
+
+  // Send packet data
+  if (send(unix_socket_fd_, data, length, 0) == -1) {
+    ENVOY_LOG(error, "Snort DAQ manager: Sending data failed: {}", strerror(errno));
     return false;
   }
 
@@ -74,10 +81,10 @@ bool DaqManager::sendPacketToDaq(const uint8_t* data, size_t length) {
 }
 
 bool DaqManager::getVerdictFromDaq() {
-  DaqVerdict verdict;
+  DaqVerdict verdict = DAQ_VERDICT_BLOCK;
   int ret = recv(unix_socket_fd_, &verdict, sizeof(verdict), 0);
   if (ret < 0) {
-    ENVOY_LOG(error, "Snort DAQ manager: Receiving message failed: %s", strerror(errno));
+    ENVOY_LOG(error, "Snort DAQ manager: Receiving message failed: {}", strerror(errno));
     return false;
   }
   if (verdict != DAQ_VERDICT_PASS) {
