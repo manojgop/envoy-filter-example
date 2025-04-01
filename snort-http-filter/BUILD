@@ -35,7 +35,7 @@ envoy_cc_library(
     hdrs = ["pcap_file_manager.h", "daq_manager.h"],
     repository = "@envoy",
     deps = [
-        "//snort-filter/libpcap:libpcap",
+        "//snort-http-filter/deps/libpcap:libpcap",
         "@envoy//source/common/common:logger_lib",
     ],
 )

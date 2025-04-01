@@ -1,7 +1,7 @@
 # Envoy snort http filter
 
 This project demonstrates the linking of additional filters with the Envoy binary.
-A new filter `snorthttp` is introduced.
+A new filter `envoy.filters.http.snort` is introduced.
 
 ## Building
 
@@ -17,7 +17,7 @@ The [`WORKSPACE`](WORKSPACE) file maps the `@envoy` repository to this local pat
 
 The [`BUILD`](BUILD) file introduces a new Envoy static binary target, `envoy`,
 that links together the new filter and `@envoy//source/exe:envoy_main_entry_lib`. The
-`snorthttp` filter registers itself during the static initialization phase of the
+`envoy.filters.http.snort` filter registers itself during the static initialization phase of the
 Envoy binary as a new filter.
 
 Envoy snort http filter can be used along with Snort process configured with Snort Envoy DAQ

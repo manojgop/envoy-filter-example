@@ -11,25 +11,28 @@
 #include "envoy/server/filter_config.h"
 
 namespace Envoy {
-namespace Server {
-namespace Configuration {
+namespace Extensions {
+namespace HttpFilters {
+namespace SnortHttp {
 
 /**
  * Config registration for the snort http filter. @see NamedNetworkFilterConfigFactory.
  */
-class SnortHttpFilterConfigFactory : public NamedHttpFilterConfigFactory {
+class SnortHttpFilterConfigFactory : public Server::Configuration::NamedHttpFilterConfigFactory {
 public:
   absl::StatusOr<Http::FilterFactoryCb>
   createFilterFactoryFromProto(const Protobuf::Message& proto_config, const std::string&,
-                               FactoryContext& context) override;
+                               Server::Configuration::FactoryContext& context) override;
 
   ProtobufTypes::MessagePtr createEmptyConfigProto() override;
   std::string name() const override;
-  bool isTerminalFilterByProto(const Protobuf::Message&, ServerFactoryContext&) override {
+  bool isTerminalFilterByProto(const Protobuf::Message&,
+                               Server::Configuration::ServerFactoryContext&) override {
     return false;
   }
 };
 
-} // namespace Configuration
-} // namespace Server
+} // namespace SnortHttp
+} // namespace HttpFilters
+} // namespace Extensions
 } // namespace Envoy

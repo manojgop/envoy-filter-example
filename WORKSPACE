@@ -35,5 +35,5 @@ http_archive(
     name = "libpcap",
     urls = ["https://www.tcpdump.org/release/libpcap-1.10.1.tar.gz"],
     strip_prefix = "libpcap-1.10.1",
-    build_file = "@//snort-filter/libpcap:BUILD",
+    build_file = "@//snort-http-filter/deps/libpcap:BUILD",
 )

@@ -2,11 +2,13 @@
 #include "source/common/buffer/buffer_impl.h"
 
 namespace Envoy {
-namespace Http {
+namespace Extensions {
+namespace HttpFilters {
+namespace SnortHttp {
 
 // Snort Http Filter Config
-SnortHttpFilterConfig::SnortHttpFilterConfig(const snort::SnortHttpConfig& proto_config,
-                                             Stats::Scope& scope)
+SnortHttpFilterConfig::SnortHttpFilterConfig(
+    const envoy::filters::http::snort::SnortHttpConfig& proto_config, Stats::Scope& scope)
     : stat_prefix_(proto_config.stat_prefix()),
       stats_(generateStats(proto_config.stat_prefix(), scope)),
       save_pcap_(proto_config.save_pcap()), analyze_request_(getAnalyzeRequest(proto_config)),
@@ -18,7 +20,8 @@ SnortHttpStats SnortHttpFilterConfig::generateStats(const std::string& prefix,
   return {ALL_SNORT_HTTP_STATS(POOL_COUNTER_PREFIX(scope, final_prefix))};
 }
 
-bool SnortHttpFilterConfig::getAnalyzeRequest(const snort::SnortHttpConfig& proto_config) {
+bool SnortHttpFilterConfig::getAnalyzeRequest(
+    const envoy::filters::http::snort::SnortHttpConfig& proto_config) {
   // Analyze request is enabled by default if the field is not set
   if (!proto_config.has_analyze_request()) {
     return true;
@@ -38,8 +41,8 @@ SnortHttpFilter::SnortHttpFilter(SnortHttpFilterConfigSharedPtr config) : config
       std::make_unique<ResponseAnalyzer>(config_->savePcapField(), config_->analyseResponseField());
 }
 
-FilterHeadersStatus SnortHttpFilter::decodeHeaders(Http::RequestHeaderMap& headers,
-                                                   bool end_stream) {
+Http::FilterHeadersStatus SnortHttpFilter::decodeHeaders(Http::RequestHeaderMap& headers,
+                                                         bool end_stream) {
   ENVOY_LOG(trace, "snort http: decodeHeaders Host value {}, end_stream : {}",
             headers.getHostValue(), end_stream);
 
@@ -52,7 +55,7 @@ FilterHeadersStatus SnortHttpFilter::decodeHeaders(Http::RequestHeaderMap& heade
   return Http::FilterHeadersStatus::StopIteration;
 }
 
-FilterDataStatus SnortHttpFilter::decodeData(Buffer::Instance& data, bool end_stream) {
+Http::FilterDataStatus SnortHttpFilter::decodeData(Buffer::Instance& data, bool end_stream) {
   ENVOY_LOG(trace, "snort http: decodeData got {} bytes", data.length());
 
   // Move data to internal buffer
@@ -71,7 +74,7 @@ FilterDataStatus SnortHttpFilter::decodeData(Buffer::Instance& data, bool end_st
   return Http::FilterDataStatus::StopIterationAndBuffer;
 }
 
-FilterTrailersStatus SnortHttpFilter::decodeTrailers(Http::RequestTrailerMap& trailers) {
+Http::FilterTrailersStatus SnortHttpFilter::decodeTrailers(Http::RequestTrailerMap& trailers) {
   request_trailers_ = &trailers;
   analyzeRequest(true);
   return Http::FilterTrailersStatus::Continue;
@@ -81,8 +84,8 @@ void SnortHttpFilter::setDecoderFilterCallbacks(Http::StreamDecoderFilterCallbac
   decoder_callbacks_ = &callbacks;
 }
 
-FilterHeadersStatus SnortHttpFilter::encodeHeaders(Http::ResponseHeaderMap& headers,
-                                                   bool end_stream) {
+Http::FilterHeadersStatus SnortHttpFilter::encodeHeaders(Http::ResponseHeaderMap& headers,
+                                                         bool end_stream) {
   ENVOY_LOG(trace, "snort http: encodeHeaders status {}, end_stream: {}", headers.getStatusValue(),
             end_stream);
 
@@ -95,7 +98,7 @@ FilterHeadersStatus SnortHttpFilter::encodeHeaders(Http::ResponseHeaderMap& head
   return Http::FilterHeadersStatus::StopIteration;
 }
 
-FilterDataStatus SnortHttpFilter::encodeData(Buffer::Instance& data, bool end_stream) {
+Http::FilterDataStatus SnortHttpFilter::encodeData(Buffer::Instance& data, bool end_stream) {
   ENVOY_LOG(trace, "snort http: encodeData got {} bytes, end_stream: {}", data.length(),
             end_stream);
   // Move data to internal buffer
@@ -113,7 +116,7 @@ FilterDataStatus SnortHttpFilter::encodeData(Buffer::Instance& data, bool end_st
   return Http::FilterDataStatus::StopIterationAndBuffer;
 }
 
-FilterTrailersStatus SnortHttpFilter::encodeTrailers(Http::ResponseTrailerMap& trailers) {
+Http::FilterTrailersStatus SnortHttpFilter::encodeTrailers(Http::ResponseTrailerMap& trailers) {
   response_trailers_ = &trailers;
   analyzeResponse(true);
   return Http::FilterTrailersStatus::Continue;
@@ -275,5 +278,7 @@ bool SnortHttpFilter::processResponse(const uint8_t* data, size_t size) {
   return allow;
 }
 
-} // namespace Http
+} // namespace SnortHttp
+} // namespace HttpFilters
+} // namespace Extensions
 } // namespace Envoy

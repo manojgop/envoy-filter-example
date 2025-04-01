@@ -7,7 +7,10 @@
 #include "source/common/buffer/buffer_impl.h"
 
 namespace Envoy {
-namespace Http {
+namespace Extensions {
+namespace HttpFilters {
+namespace SnortHttp {
+
 /**
  * Traffic analayzer using snort.
  */
@@ -71,5 +74,7 @@ private:
   const bool enable_analyze_;
 };
 
-} // namespace Http
+} // namespace SnortHttp
+} // namespace HttpFilters
+} // namespace Extensions
 } // namespace Envoy

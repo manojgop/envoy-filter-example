@@ -7,7 +7,9 @@
 #define DAQ_MANAGER_MAX_DATA_SIZE 1518
 
 namespace Envoy {
-namespace Http {
+namespace Extensions {
+namespace HttpFilters {
+namespace SnortHttp {
 
 class DaqManager : public Logger::Loggable<Logger::Id::filter> {
 public:
@@ -46,5 +48,7 @@ private:
   bool connectSocket();
 };
 
-} // namespace Http
+} // namespace SnortHttp
+} // namespace HttpFilters
+} // namespace Extensions
 } // namespace Envoy

@@ -9,7 +9,9 @@
 #include <pcap.h>
 
 namespace Envoy {
-namespace Http {
+namespace Extensions {
+namespace HttpFilters {
+namespace SnortHttp {
 
 DaqManager::DaqManager() {
   // Create and Connect to Snort process if not yet connected
@@ -93,5 +95,7 @@ bool DaqManager::getVerdictFromDaq() {
   return true;
 }
 
-} // namespace Http
+} // namespace SnortHttp
+} // namespace HttpFilters
+} // namespace Extensions
 } // namespace Envoy

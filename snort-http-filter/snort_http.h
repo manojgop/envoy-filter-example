@@ -10,7 +10,9 @@
 #include "source/extensions/filters/http/common/pass_through_filter.h"
 
 namespace Envoy {
-namespace Http {
+namespace Extensions {
+namespace HttpFilters {
+namespace SnortHttp {
 
 /**
  * All snort http stats. @see stats_macros.h
@@ -32,7 +34,8 @@ struct SnortHttpStats {
 
 class SnortHttpFilterConfig {
 public:
-  SnortHttpFilterConfig(const snort::SnortHttpConfig& proto_config, Stats::Scope& scope);
+  SnortHttpFilterConfig(const envoy::filters::http::snort::SnortHttpConfig& proto_config,
+                        Stats::Scope& scope);
 
   const std::string& statPrefix() const { return stat_prefix_; }
   SnortHttpStats& stats() { return stats_; }
@@ -47,7 +50,7 @@ private:
   const bool analyze_request_;
   const bool analyze_response_;
   static SnortHttpStats generateStats(const std::string& prefix, Stats::Scope& scope);
-  static bool getAnalyzeRequest(const snort::SnortHttpConfig& proto_config);
+  static bool getAnalyzeRequest(const envoy::filters::http::snort::SnortHttpConfig& proto_config);
 };
 
 using SnortHttpFilterConfigSharedPtr = std::shared_ptr<SnortHttpFilterConfig>;
@@ -56,20 +59,22 @@ class SnortHttpFilter : public Http::PassThroughFilter, Logger::Loggable<Logger:
 public:
   SnortHttpFilter(SnortHttpFilterConfigSharedPtr);
 
-  FilterHeadersStatus decodeHeaders(Http::RequestHeaderMap& headers, bool end_stream) override;
-  FilterDataStatus decodeData(Buffer::Instance& data, bool end_stream) override;
-  FilterTrailersStatus decodeTrailers(Http::RequestTrailerMap& trailers) override;
+  Http::FilterHeadersStatus decodeHeaders(Http::RequestHeaderMap& headers,
+                                          bool end_stream) override;
+  Http::FilterDataStatus decodeData(Buffer::Instance& data, bool end_stream) override;
+  Http::FilterTrailersStatus decodeTrailers(Http::RequestTrailerMap& trailers) override;
   void setDecoderFilterCallbacks(Http::StreamDecoderFilterCallbacks& callbacks) override;
 
-  FilterHeadersStatus encodeHeaders(Http::ResponseHeaderMap& headers, bool end_stream) override;
-  FilterDataStatus encodeData(Buffer::Instance& data, bool end_stream) override;
-  FilterTrailersStatus encodeTrailers(Http::ResponseTrailerMap& trailers) override;
+  Http::FilterHeadersStatus encodeHeaders(Http::ResponseHeaderMap& headers,
+                                          bool end_stream) override;
+  Http::FilterDataStatus encodeData(Buffer::Instance& data, bool end_stream) override;
+  Http::FilterTrailersStatus encodeTrailers(Http::ResponseTrailerMap& trailers) override;
   void setEncoderFilterCallbacks(Http::StreamEncoderFilterCallbacks& callbacks) override;
 
 private:
   const SnortHttpFilterConfigSharedPtr config_;
-  StreamDecoderFilterCallbacks* decoder_callbacks_{};
-  StreamEncoderFilterCallbacks* encoder_callbacks_{};
+  Http::StreamDecoderFilterCallbacks* decoder_callbacks_{};
+  Http::StreamEncoderFilterCallbacks* encoder_callbacks_{};
 
   std::unique_ptr<RequestAnalyzer> request_analyzer_;
   std::unique_ptr<ResponseAnalyzer> response_analyzer_;
@@ -97,5 +102,7 @@ private:
   bool processResponse(const uint8_t* data, size_t size);
 };
 
-} // namespace Http
+} // namespace SnortHttp
+} // namespace HttpFilters
+} // namespace Extensions
 } // namespace Envoy

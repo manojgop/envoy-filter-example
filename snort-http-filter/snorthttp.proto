@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package snort;
+package envoy.filters.http.snort;
 
 import "validate/validate.proto";
 

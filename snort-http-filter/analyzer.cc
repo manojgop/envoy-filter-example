@@ -11,7 +11,9 @@
 #include <cstdint>
 
 namespace Envoy {
-namespace Http {
+namespace Extensions {
+namespace HttpFilters {
+namespace SnortHttp {
 
 // BaseAnalyzer
 BaseAnalyzer::BaseAnalyzer() {
@@ -193,7 +195,7 @@ std::string ResponseAnalyzer::serializeResponseHeaders(const Http::ResponseHeade
   // Add HTTP version and status code
   auto status_code = std::string(headers.getStatusValue());
   auto status_code_string =
-      std::string(CodeUtility::toString(static_cast<Http::Code>(std::stoi(status_code))));
+      std::string(Http::CodeUtility::toString(static_cast<Http::Code>(std::stoi(status_code))));
 
   // Add HTTP response line in payload (e.g: HTTP/1.1 200 OK)
   result += "HTTP/1.1 " + status_code + " " + status_code_string + "\r\n";
@@ -316,5 +318,7 @@ bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
   return status;
 }
 
-} // namespace Http
+} // namespace SnortHttp
+} // namespace HttpFilters
+} // namespace Extensions
 } // namespace Envoy

@@ -29,9 +29,9 @@ static_resources:
                 route:
                   cluster: service-http
           http_filters:
-          - name: snorthttp
+          - name: envoy.filters.http.snort
             typed_config:
-              "@type": type.googleapis.com/snort.SnortHttpConfig
+              "@type": type.googleapis.com/envoy.filters.http.snort.SnortHttpConfig
               stat_prefix: log
           - name: envoy.filters.http.router
             typed_config:
