@@ -6,7 +6,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <errno.h>
-#include <pcap.h>
 
 namespace Envoy {
 namespace Extensions {
@@ -48,29 +47,12 @@ bool DaqManager::connectSocket() {
 }
 
 bool DaqManager::sendPacketToDaq(const uint8_t* data, size_t length) {
-  // std::lock_guard<std::mutex> lock(mutex_);
 
   // Create and connect to snort process if not yet connected
   if (unix_socket_fd_ < 0) {
     if (!connectSocket()) {
       return false;
     }
-  }
-
-  auto now = std::chrono::system_clock::now();
-  auto duration = now.time_since_epoch();
-  auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
-
-  struct pcap_pkthdr pcap_header;
-  pcap_header.ts.tv_sec = static_cast<int64_t>(microseconds / 1000000);
-  pcap_header.ts.tv_usec = static_cast<int64_t>(microseconds % 1000000);
-  pcap_header.caplen = length;
-  pcap_header.len = length;
-
-  // Send pcap header
-  if (send(unix_socket_fd_, &pcap_header, sizeof(pcap_header), 0) == -1) {
-    ENVOY_LOG(error, "Snort DAQ manager: Sending pcap header failed: {}", strerror(errno));
-    return false;
   }
 
   // Send packet data
