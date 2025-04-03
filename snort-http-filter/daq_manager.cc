@@ -71,7 +71,7 @@ bool DaqManager::getVerdictFromDaq() {
     ENVOY_LOG(error, "Snort DAQ manager: Receiving message failed: {}", strerror(errno));
     return false;
   }
-  if (verdict != DAQ_VERDICT_PASS) {
+  if (verdict == DAQ_VERDICT_BLOCK || verdict == DAQ_VERDICT_BLACKLIST) {
     return false;
   }
   return true;

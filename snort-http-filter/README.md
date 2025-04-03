@@ -35,7 +35,7 @@ snort will block any http request which has `secretkey` as http parameter.
 
 1. Run a http hello world docker container in background as http server.
 
-   `docker run --rm -dit -p 5050:80 strm/helloworld-http`
+   `docker run --rm -d -p 5050:80 strm/helloworld-http`
 
 2. After building envoy static binary, execute following command from repo root directory in Terminal 1.
 
@@ -62,3 +62,36 @@ snort will block any http request which has `secretkey` as http parameter.
    log.snort.http.total_request: 2
    log.snort.http.total_response: 2
    ```
+## Run performance test with wrk tool
+To run performance test with wrk tool, we need to use lua script to connect with envoy proxy
+
+1. Install the following packages
+
+   ```
+   sudo apt-get install luarocks
+   sudo luarocks install luasocket
+   sudo luarocks install luasec
+   sudo luarocks install lua-cjson
+   ```
+
+2. Set LUA_PATH. Please note the last two `;;` at the end to search for   standard lua path in the system.
+
+   `export LUA_PATH="/<path>/lua/?.lua;;"`
+
+3. Run a http hello world docker container in background as http server.
+
+   `docker run --rm -d -p 5050:80 strm/helloworld-http`
+
+4. To run http POST tests, run post http server which can be found in [`httpserver`](./test/httpserver/)
+
+   `docker run --rm -d -p 5000:80 http-post-server-img`
+
+5. After building envoy static binary, execute following command from repo root directory in Terminal 1.
+
+   `$(bazel info bazel-genfiles)/snort-http-filter/envoy --config-path ./snort-http-filter/yaml/envoy-post-https-http-snort.yaml --component-log-level filter:trace`
+
+6. Set the PATH for PROXY_URL : `export PROXY_URL=https://143.182.136.143:10000`
+
+7. Run http GET performance test using wrk tool
+
+   `wrk -t10 -c10 -d1s -s ./lua/proxy_get.lua $PROXY_URL -- http://strata.net`
