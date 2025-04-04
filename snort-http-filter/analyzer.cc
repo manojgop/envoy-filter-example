@@ -19,7 +19,7 @@ namespace SnortHttp {
 BaseAnalyzer::BaseAnalyzer() {
   seq_ = generateRandomNumber();
   ack_ = 0;
-  daq_ = std::make_unique<DaqManager>();
+  daq_ = nullptr;
 }
 
 uint32_t BaseAnalyzer::generateRandomNumber() {
@@ -34,7 +34,7 @@ uint32_t BaseAnalyzer::generateRandomNumber() {
 }
 
 std::string BaseAnalyzer::serializeHeaders(const Http::HeaderMap& headers) {
-  std::string result;
+  std::ostringstream result;
 
   // Serialize each header
   headers.iterate([&result](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
@@ -43,14 +43,14 @@ std::string BaseAnalyzer::serializeHeaders(const Http::HeaderMap& headers) {
     if (key.starts_with(":")) {
       return Http::HeaderMap::Iterate::Continue;
     }
-    auto val = std::string(header.value().getStringView());
-    result += key + ": " + val + "\r\n";
+    auto val = header.value() != nullptr ? std::string(header.value().getStringView()) : "";
+    result << key << ": " << val << "\r\n";
     return Http::HeaderMap::Iterate::Continue;
   });
 
-  result += "\r\n"; // End of headers
+  result << "\r\n"; // End of headers
 
-  return result;
+  return result.str();
 }
 
 Buffer::OwnedImpl
@@ -151,17 +151,23 @@ uint16_t BaseAnalyzer::checksum(const uint16_t* buf, int len) {
 
 // Request Analyzer
 RequestAnalyzer::RequestAnalyzer(bool enable_save_pcap, bool enable_analyze)
-    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze) {}
+    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze) {
+
+  if (enable_analyze && daq_ == nullptr) {
+    ENVOY_LOG(trace, "snort RequestAnalyzer enabled. Creating DAQ manager");
+    daq_ = std::make_unique<DaqManager>();
+  }
+}
 
 std::string RequestAnalyzer::serializeRequestHeaders(const Http::RequestHeaderMap& headers) {
   std::string result;
 
   // Serialize method and path
-  auto method = std::string(headers.getMethodValue());
-  auto scheme = std::string(headers.getSchemeValue());
-  auto path = std::string(headers.getPathValue());
-  auto host = std::string(headers.getHostValue());
-  auto protocol = std::string(headers.getProtocolValue());
+  absl::string_view method = headers.getMethodValue();
+  absl::string_view scheme = headers.getSchemeValue();
+  absl::string_view path = headers.getPathValue();
+  absl::string_view host = headers.getHostValue();
+  absl::string_view protocol = headers.getProtocolValue();
   if (protocol.empty()) {
     protocol = "HTTP/1.1";
   }
@@ -172,7 +178,15 @@ std::string RequestAnalyzer::serializeRequestHeaders(const Http::RequestHeaderMa
       method, scheme, path, host, protocol);
 
   // Add HTTP request line in payload (e.g:  GET http://example.com/xyz/ HTTP/1.1)
-  result += method + " " + scheme + "://" + host + path + " " + protocol + "\r\n";
+  result.append(method.data(), method.size());
+  result.append(" ");
+  result.append(scheme.data(), scheme.size());
+  result.append("://");
+  result.append(host.data(), host.size());
+  result.append(path.data(), path.size());
+  result.append(" ");
+  result.append(protocol.data(), protocol.size());
+  result.append("\r\n");
 
   // Serialize each header
   result += serializeHeaders(headers);
@@ -187,21 +201,34 @@ std::string RequestAnalyzer::serializeRequestTrailers(const Http::RequestTrailer
 
 // Response Analyzer
 ResponseAnalyzer::ResponseAnalyzer(bool enable_save_pcap, bool enable_analyze)
-    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze) {}
+    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze) {
+
+  if (enable_analyze && daq_ == nullptr) {
+    ENVOY_LOG(trace, "snort ResponseAnalyzer enabled. Creating DAQ manager");
+    daq_ = std::make_unique<DaqManager>();
+  }
+}
 
 std::string ResponseAnalyzer::serializeResponseHeaders(const Http::ResponseHeaderMap& headers) {
   std::string result;
 
   // Add HTTP version and status code
   auto status_code = std::string(headers.getStatusValue());
+  if (status_code.empty() || !std::all_of(status_code.begin(), status_code.end(), ::isdigit)) {
+    ENVOY_LOG(error, "Invalid or missing status code: {}", status_code);
+    return ""; // Return an empty string or handle the error as needed
+  }
   auto status_code_string =
       std::string(Http::CodeUtility::toString(static_cast<Http::Code>(std::stoi(status_code))));
 
   // Add HTTP response line in payload (e.g: HTTP/1.1 200 OK)
-  result += "HTTP/1.1 " + status_code + " " + status_code_string + "\r\n";
+  std::string protocol = "HTTP/1.1";
+  result += protocol + " " + status_code + " " + status_code_string + "\r\n";
 
-  // Serialize each header
-  result += serializeHeaders(headers);
+  // Serialize each header if headers are valid
+  if (!headers.empty()) {
+    result += serializeHeaders(headers);
+  }
 
   return result;
 }
@@ -215,6 +242,11 @@ bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
                                      const Http::RequestHeaderMap* headers,
                                      const Http::RequestTrailerMap* trailers,
                                      const Network::Connection& connection) {
+
+  if (!enable_analyze_ && !enable_save_pcap_) {
+    ENVOY_LOG(trace, "Snort DAQ analysis and PCAP saving are disabled");
+    return true;
+  }
 
   Buffer::OwnedImpl buffer;
   if (headers) {
@@ -269,6 +301,11 @@ bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
                                        const Http::ResponseHeaderMap* headers,
                                        const Http::ResponseTrailerMap* trailers,
                                        const Network::Connection& connection) {
+
+  if (!enable_analyze_ && !enable_save_pcap_) {
+    ENVOY_LOG(trace, "Snort DAQ analysis and PCAP saving are disabled");
+    return true;
+  }
 
   Buffer::OwnedImpl buffer;
   if (headers) {

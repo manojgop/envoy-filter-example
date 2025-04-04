@@ -50,7 +50,6 @@ private:
   const bool analyze_request_;
   const bool analyze_response_;
   static SnortHttpStats generateStats(const std::string& prefix, Stats::Scope& scope);
-  static bool getAnalyzeRequest(const envoy::filters::http::snort::SnortHttpConfig& proto_config);
 };
 
 using SnortHttpFilterConfigSharedPtr = std::shared_ptr<SnortHttpFilterConfig>;

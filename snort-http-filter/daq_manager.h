@@ -22,14 +22,6 @@ public:
 private:
   const char* kUnixSocketPath = "/tmp/envoy.sock";
   int unix_socket_fd_;
-  enum DaqEnvoyMsgType {
-    DAQ_ENVOY_MSG_TYPE_NONE = 0,
-    DAQ_ENVOY_MSG_TYPE_HELLO = 1,
-    DAQ_ENVOY_MSG_TYPE_CONFIG = 2,
-    DAQ_ENVOY_MSG_TYPE_BPOOL = 3,
-    DAQ_ENVOY_MSG_TYPE_QPAIR = 4,
-    DAQ_ENVOY_MSG_TYPE_PACKET = 5,
-  };
 
   // Should match DAQ_Verdict enum in https://github.com/snort3/libdaq/blob/master/api/daq_common.h
   enum DaqVerdict {

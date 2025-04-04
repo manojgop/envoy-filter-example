@@ -11,22 +11,13 @@ SnortHttpFilterConfig::SnortHttpFilterConfig(
     const envoy::filters::http::snort::SnortHttpConfig& proto_config, Stats::Scope& scope)
     : stat_prefix_(proto_config.stat_prefix()),
       stats_(generateStats(proto_config.stat_prefix(), scope)),
-      save_pcap_(proto_config.save_pcap()), analyze_request_(getAnalyzeRequest(proto_config)),
+      save_pcap_(proto_config.save_pcap()), analyze_request_(proto_config.analyze_request()),
       analyze_response_(proto_config.analyze_response()) {}
 
 SnortHttpStats SnortHttpFilterConfig::generateStats(const std::string& prefix,
                                                     Stats::Scope& scope) {
   const std::string final_prefix = Envoy::statPrefixJoin(prefix, "snort.http.");
   return {ALL_SNORT_HTTP_STATS(POOL_COUNTER_PREFIX(scope, final_prefix))};
-}
-
-bool SnortHttpFilterConfig::getAnalyzeRequest(
-    const envoy::filters::http::snort::SnortHttpConfig& proto_config) {
-  // Analyze request is enabled by default if the field is not set
-  if (!proto_config.has_analyze_request()) {
-    return true;
-  }
-  return proto_config.analyze_request();
 }
 
 // Snort Http Filter

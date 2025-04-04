@@ -7,6 +7,6 @@ import "validate/validate.proto";
 message SnortHttpConfig {
     string stat_prefix = 1 [(validate.rules).string = {min_len: 1}];
     optional bool save_pcap = 2;
-    optional bool analyze_request = 3; // will be enabled by default if field is not present
+    optional bool analyze_request = 3;
     optional bool analyze_response = 4;
 }

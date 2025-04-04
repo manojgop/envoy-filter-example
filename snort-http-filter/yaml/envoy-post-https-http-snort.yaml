@@ -37,7 +37,7 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/envoy.filters.http.snort.SnortHttpConfig
               stat_prefix: log
-              save_pcap: true
+              save_pcap: false
               analyze_request: true
               analyze_response: false
           - name: envoy.filters.http.router

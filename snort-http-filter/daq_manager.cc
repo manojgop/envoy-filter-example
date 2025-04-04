@@ -13,11 +13,13 @@ namespace HttpFilters {
 namespace SnortHttp {
 
 DaqManager::DaqManager() {
+  ENVOY_LOG(trace, "Snort DAQ manager: Create");
   // Create and Connect to Snort process if not yet connected
   connectSocket();
 }
 
 DaqManager::~DaqManager() {
+  ENVOY_LOG(trace, "Snort DAQ manager: Destroy");
   if (unix_socket_fd_ > 0) {
     close(unix_socket_fd_);
     unix_socket_fd_ = -1;
