@@ -244,7 +244,7 @@ bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
                                      const Network::Connection& connection) {
 
   if (!enable_analyze_ && !enable_save_pcap_) {
-    ENVOY_LOG(trace, "Snort DAQ analysis and PCAP saving are disabled");
+    ENVOY_LOG(trace, "Snort http request analysis and PCAP saving are disabled");
     return true;
   }
 
@@ -276,6 +276,7 @@ bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
 
   // If analysis using snort is disabled return true.
   if (!enable_analyze_) {
+    ENVOY_LOG(trace, "Snort http request analysis is disabled");
     return true;
   }
 
@@ -303,7 +304,7 @@ bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
                                        const Network::Connection& connection) {
 
   if (!enable_analyze_ && !enable_save_pcap_) {
-    ENVOY_LOG(trace, "Snort DAQ analysis and PCAP saving are disabled");
+    ENVOY_LOG(trace, "Snort http response analysis and PCAP saving are disabled");
     return true;
   }
 
@@ -335,6 +336,7 @@ bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
 
   // If analysis using snort is disabled return true.
   if (!enable_analyze_) {
+    ENVOY_LOG(trace, "Snort http response analysis is disabled");
     return true;
   }
 
