@@ -8,7 +8,8 @@ A new filter `envoy.filters.http.snort` is introduced.
 To build the Envoy static binary:
 
 1. `git submodule update --init`
-2. `bazel build //snort-http-filter:envoy`
+2. (Optional): Use preferred envoy version `cd envoy && git checkout v1.33.0`
+3. `bazel build //snort-http-filter:envoy`
 
 ## How it works
 
@@ -62,7 +63,22 @@ snort will block any http request which has `secretkey` as http parameter.
    log.snort.http.total_request: 2
    log.snort.http.total_response: 2
    ```
-## Run performance test with wrk tool
+## Run performance test
+
+### Build Envoy with optimization
+To run peformance test build envoy using clang with optimization enabled.
+(Note: There are build error if we build envoy using gcc with optimization)
+Refer [Build Envoy with bazel and clang](https://github.com/envoyproxy/envoy/blob/main/bazel/README.md#linux)
+
+For example, is clang-14 is installed at path /usr/lib/llvm-14, use following commands
+
+```
+source ./envoy/bazel/setup_clang.sh /usr/lib/llvm-14
+echo "build --config=clang" >> user.bazelrc
+bazel build -c opt //snort-http-filter:envoy
+```
+
+### Performance test with wrk tool
 To run performance test with wrk tool, we need to use lua script to connect with envoy proxy
 
 1. Install the following packages
@@ -88,10 +104,29 @@ To run performance test with wrk tool, we need to use lua script to connect with
 
 5. After building envoy static binary, execute following command from repo root directory in Terminal 1.
 
-   `$(bazel info bazel-genfiles)/snort-http-filter/envoy --config-path ./snort-http-filter/yaml/envoy-post-https-http-snort.yaml --component-log-level filter:trace`
+   `./bazel-bin/snort-http-filter/envoy --config-path ./snort-http-filter/yaml/envoy-post-https-http-snort.yaml --component-log-level filter:trace`
 
 6. Set the PATH for PROXY_URL : `export PROXY_URL=https://143.182.136.143:10000`
 
 7. Run http GET performance test using wrk tool
 
    `wrk -t10 -c10 -d1s -s ./lua/proxy_get.lua $PROXY_URL -- http://strata.net`
+
+### Another approach with wrk tool and iptables rule
+
+1. Create new user “test” (assume there is already a default user “ubuntu”):
+
+`sudo useradd test -m -s /bin/bash -u 10000`
+
+2. Set up iptables rule, redirect the traffic from user “test” to envoy proxy.
+   In the command below, replace `143.182.136.143` with the IP address of envoy proxy.
+
+`sudo iptables -t nat -A OUTPUT -p tcp -m owner --uid-owner 10000 -j DNAT --to-destination 143.182.136.143:10000`
+
+3. Copy the envoy proxy public certificate. This is the cerificate used in `yaml/envoy-post-https-http-snort.yaml`
+
+`sudo cp test/envoy-proxy.pem /etc/ssl/certs/`
+
+4. Run http GET performance test using wrk tool. The traffic will be redirect to envoy since we have iptables rule applied
+
+`./wrk -t10 -c10 -d1s https://strata.net/`
