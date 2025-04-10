@@ -17,7 +17,8 @@ namespace SnortHttp {
 
 // BaseAnalyzer
 BaseAnalyzer::BaseAnalyzer() {
-  seq_ = generateRandomNumber();
+  // Calling generateRandomNumber() can have impact performance. Comment it for now.
+  seq_ = 0;//generateRandomNumber();
   ack_ = 0;
   daq_ = nullptr;
 }
