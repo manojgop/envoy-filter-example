@@ -12,7 +12,7 @@ namespace Extensions {
 namespace HttpFilters {
 namespace SnortHttp {
 
-DaqManager::DaqManager() {
+DaqManager::DaqManager(const std::string& unix_socket_path) : unix_socket_path_(unix_socket_path) {
   ENVOY_LOG(trace, "Snort DAQ manager: Create");
   // Create and Connect to Snort process if not yet connected
   connectSocket();
@@ -35,11 +35,11 @@ bool DaqManager::connectSocket() {
   struct sockaddr_un server_addr;
   memset(&server_addr, 0, sizeof(server_addr));
   server_addr.sun_family = AF_UNIX;
-  strncpy(server_addr.sun_path, kUnixSocketPath, sizeof(server_addr.sun_path) - 1);
+  strncpy(server_addr.sun_path, unix_socket_path_.c_str(), sizeof(server_addr.sun_path) - 1);
 
   if (connect(unix_socket_fd_, reinterpret_cast<struct sockaddr*>(&server_addr),
               sizeof(server_addr)) < 0) {
-    ENVOY_LOG(error, "Snort DAQ manager: Connection to server failed on {} : {}", kUnixSocketPath,
+    ENVOY_LOG(error, "Snort DAQ manager: Connection to server failed on {} : {}", unix_socket_path_,
               strerror(errno));
     close(unix_socket_fd_);
     unix_socket_fd_ = -1;

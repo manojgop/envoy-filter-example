@@ -18,7 +18,7 @@ namespace SnortHttp {
 // BaseAnalyzer
 BaseAnalyzer::BaseAnalyzer() {
   // Calling generateRandomNumber() can have impact performance. Comment it for now.
-  seq_ = 0;//generateRandomNumber();
+  seq_ = 0; // generateRandomNumber();
   ack_ = 0;
   daq_ = nullptr;
 }
@@ -41,7 +41,7 @@ std::string BaseAnalyzer::serializeHeaders(const Http::HeaderMap& headers) {
   headers.iterate([&result](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
     auto key = std::string(header.key().getStringView());
     // Ignore key starting with ":" (e.g: ":authority", ":path", ":status")
-    if (key.starts_with(":")) {
+    if (!key.empty() && key[0] == ':') {
       return Http::HeaderMap::Iterate::Continue;
     }
     auto val = header.value() != nullptr ? std::string(header.value().getStringView()) : "";
@@ -151,12 +151,14 @@ uint16_t BaseAnalyzer::checksum(const uint16_t* buf, int len) {
 }
 
 // Request Analyzer
-RequestAnalyzer::RequestAnalyzer(bool enable_save_pcap, bool enable_analyze)
-    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze) {
+RequestAnalyzer::RequestAnalyzer(bool enable_save_pcap, bool enable_analyze,
+                                 const std::string& unix_socket_path)
+    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze),
+      unix_socket_path_(unix_socket_path) {
 
   if (enable_analyze && daq_ == nullptr) {
     ENVOY_LOG(trace, "snort RequestAnalyzer enabled. Creating DAQ manager");
-    daq_ = std::make_unique<DaqManager>();
+    daq_ = std::make_unique<DaqManager>(unix_socket_path_);
   }
 }
 
@@ -201,12 +203,14 @@ std::string RequestAnalyzer::serializeRequestTrailers(const Http::RequestTrailer
 }
 
 // Response Analyzer
-ResponseAnalyzer::ResponseAnalyzer(bool enable_save_pcap, bool enable_analyze)
-    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze) {
+ResponseAnalyzer::ResponseAnalyzer(bool enable_save_pcap, bool enable_analyze,
+                                   const std::string& unix_socket_path)
+    : BaseAnalyzer(), enable_save_pcap_(enable_save_pcap), enable_analyze_(enable_analyze),
+      unix_socket_path_(unix_socket_path) {
 
   if (enable_analyze && daq_ == nullptr) {
     ENVOY_LOG(trace, "snort ResponseAnalyzer enabled. Creating DAQ manager");
-    daq_ = std::make_unique<DaqManager>();
+    daq_ = std::make_unique<DaqManager>(unix_socket_path_);
   }
 }
 
@@ -245,7 +249,7 @@ bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
                                      const Network::Connection& connection) {
 
   if (!enable_analyze_ && !enable_save_pcap_) {
-    ENVOY_LOG(trace, "Snort http request analysis and PCAP saving are disabled");
+    ENVOY_LOG_ONCE(trace, "Snort http request analysis and PCAP saving are disabled");
     return true;
   }
 
@@ -305,7 +309,7 @@ bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
                                        const Network::Connection& connection) {
 
   if (!enable_analyze_ && !enable_save_pcap_) {
-    ENVOY_LOG(trace, "Snort http response analysis and PCAP saving are disabled");
+    ENVOY_LOG_ONCE(trace, "Snort http response analysis and PCAP saving are disabled");
     return true;
   }
 
@@ -321,7 +325,6 @@ bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
     std::string s = serializeResponseTrailers(*trailers);
     buffer.add(s);
   }
-
   // Get connection details
   auto source_address = connection.connectionInfoProvider().directLocalAddress();
   auto destination_address = connection.connectionInfoProvider().directRemoteAddress();

@@ -12,12 +12,28 @@ SnortHttpFilterConfig::SnortHttpFilterConfig(
     : stat_prefix_(proto_config.stat_prefix()),
       stats_(generateStats(proto_config.stat_prefix(), scope)),
       save_pcap_(proto_config.save_pcap()), analyze_request_(proto_config.analyze_request()),
-      analyze_response_(proto_config.analyze_response()) {}
+      analyze_response_(proto_config.analyze_response()),
+      unix_socket_path_(getUnixSocketPath(proto_config)) {
+  ENVOY_LOG(trace, "snort http config created");
+}
 
 SnortHttpStats SnortHttpFilterConfig::generateStats(const std::string& prefix,
                                                     Stats::Scope& scope) {
   const std::string final_prefix = Envoy::statPrefixJoin(prefix, "snort.http.");
   return {ALL_SNORT_HTTP_STATS(POOL_COUNTER_PREFIX(scope, final_prefix))};
+}
+
+std::string SnortHttpFilterConfig::getUnixSocketPath(
+    const envoy::filters::http::snort::SnortHttpConfig& proto_config) {
+  std::string unix_socket_path;
+  if (proto_config.has_unix_socket_path()) {
+    unix_socket_path = proto_config.unix_socket_path();
+  }
+  if (unix_socket_path.empty()) {
+    // Default socket path
+    unix_socket_path = "/tmp/envoysnort.sock";
+  }
+  return unix_socket_path;
 }
 
 // Snort Http Filter
@@ -26,10 +42,10 @@ SnortHttpFilter::SnortHttpFilter(SnortHttpFilterConfigSharedPtr config) : config
 
   processed_request_length_ = 0;
   processed_response_length_ = 0;
-  request_analyzer_ =
-      std::make_unique<RequestAnalyzer>(config_->savePcapField(), config_->analyseRequestField());
-  response_analyzer_ =
-      std::make_unique<ResponseAnalyzer>(config_->savePcapField(), config_->analyseResponseField());
+  request_analyzer_ = std::make_unique<RequestAnalyzer>(
+      config_->savePcapField(), config_->analyseRequestField(), config_->unixSocketPath());
+  response_analyzer_ = std::make_unique<ResponseAnalyzer>(
+      config_->savePcapField(), config_->analyseResponseField(), config_->unixSocketPath());
 }
 
 Http::FilterHeadersStatus SnortHttpFilter::decodeHeaders(Http::RequestHeaderMap& headers,
@@ -205,9 +221,9 @@ bool SnortHttpFilter::processData(const Envoy::Buffer::Instance& buffer, uint64_
 
 bool SnortHttpFilter::processBufferedData(const Envoy::Buffer::Instance& buffer,
                                           size_t start_offset, size_t length, bool is_request) {
-  // Extract and process the required slice of buffered data
   const auto raw_slices = buffer.getRawSlices();
   size_t offset = 0;
+  size_t remaining_length = length; // Track remaining length
   bool result = true;
 
   for (const auto& slice : raw_slices) {
@@ -216,8 +232,8 @@ bool SnortHttpFilter::processBufferedData(const Envoy::Buffer::Instance& buffer,
       continue;
     }
 
-    size_t slice_start = std::max(start_offset - offset, static_cast<size_t>(0));
-    size_t slice_end = std::min(slice_start + length, slice.len_);
+    size_t slice_start = (offset > start_offset) ? 0 : (start_offset - offset);
+    size_t slice_end = std::min(slice_start + remaining_length, slice.len_);
     size_t process_len = slice_end - slice_start;
 
     if (process_len > 0) {
@@ -227,13 +243,14 @@ bool SnortHttpFilter::processBufferedData(const Envoy::Buffer::Instance& buffer,
       } else {
         result = processResponse(start_ptr, process_len); // Process the chunk
       }
-      length -= process_len;
-      if (length == 0)
-        break;
+      remaining_length -= process_len; // Decrement remaining length
+      if (remaining_length == 0) {
+        break; // Stop processing once the required length is processed
+      }
     }
     offset += slice.len_;
     if (!result) {
-      break;
+      break; // Stop processing if an error occurs
     }
   }
   return result;

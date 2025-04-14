@@ -32,7 +32,7 @@ struct SnortHttpStats {
   ALL_SNORT_HTTP_STATS(GENERATE_COUNTER_STRUCT)
 };
 
-class SnortHttpFilterConfig {
+class SnortHttpFilterConfig : Logger::Loggable<Logger::Id::config> {
 public:
   SnortHttpFilterConfig(const envoy::filters::http::snort::SnortHttpConfig& proto_config,
                         Stats::Scope& scope);
@@ -42,6 +42,7 @@ public:
   bool savePcapField() const { return save_pcap_; }
   bool analyseRequestField() const { return analyze_request_; }
   bool analyseResponseField() const { return analyze_response_; }
+  const std::string& unixSocketPath() const { return unix_socket_path_; }
 
 private:
   const std::string stat_prefix_;
@@ -49,7 +50,10 @@ private:
   const bool save_pcap_;
   const bool analyze_request_;
   const bool analyze_response_;
+  const std::string unix_socket_path_;
   static SnortHttpStats generateStats(const std::string& prefix, Stats::Scope& scope);
+  static std::string
+  getUnixSocketPath(const envoy::filters::http::snort::SnortHttpConfig& proto_config);
 };
 
 using SnortHttpFilterConfigSharedPtr = std::shared_ptr<SnortHttpFilterConfig>;
@@ -88,7 +92,7 @@ private:
 
   uint64_t processed_request_length_ = 0;
   uint64_t processed_response_length_ = 0;
-  const size_t kThreshold = 1024;
+  const size_t kThreshold = 1024 * 4; // 4KB threshold for processing data
 
   void analyzeRequest(bool end_stream);
   void analyzeResponse(bool end_stream);

@@ -24,6 +24,21 @@ Envoy binary as a new filter.
 Envoy snort http filter can be used along with Snort process configured with Snort Envoy DAQ
 Snort Envoy DAQ is in this [repository](https://github.com/intel-sandbox/ysaik.envoy_daq/tree/main)
 
+## Filter configuration
+Add filter in http filter section in yaml file
+
+```
+http_filters:
+- name: envoy.filters.http.snort
+            typed_config:
+              "@type": type.googleapis.com/envoy.filters.http.snort.SnortHttpConfig
+              stat_prefix: log
+              save_pcap: false
+              analyze_request: true
+              analyze_response: false
+              unix_socket_path: "/tmp/envoysnort.sock"
+```
+
 ## Run Snort with Snort Envoy DAQ
 Refer this [ReadMe](https://github.com/intel-sandbox/ysaik.envoy_daq/blob/main/README.md)
 

@@ -13,14 +13,14 @@ namespace SnortHttp {
 
 class DaqManager : public Logger::Loggable<Logger::Id::filter> {
 public:
-  DaqManager();
+  DaqManager(const std::string& unix_socket_path);
   ~DaqManager();
 
   bool sendPacketToDaq(const uint8_t* data, size_t length);
   bool getVerdictFromDaq();
 
 private:
-  const char* kUnixSocketPath = "/tmp/envoy.sock";
+  const std::string unix_socket_path_;
   int unix_socket_fd_;
 
   // Should match DAQ_Verdict enum in https://github.com/snort3/libdaq/blob/master/api/daq_common.h

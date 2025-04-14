@@ -40,6 +40,7 @@ static_resources:
               save_pcap: false
               analyze_request: true
               analyze_response: false
+              unix_socket_path: "/tmp/envoysnort.sock"
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router          

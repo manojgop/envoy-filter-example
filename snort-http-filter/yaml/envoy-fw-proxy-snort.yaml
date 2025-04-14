@@ -1,0 +1,153 @@
+admin:
+  address:
+    socket_address:
+      protocol: TCP
+      address: 0.0.0.0
+      port_value: 9901
+static_resources:
+  listeners:
+  - name: listener_0
+    address:
+      socket_address:
+        protocol: TCP
+        address: 10.0.8.1
+        port_value: 10000
+    enable_reuse_port: true
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+            #access_log:
+            #- name: envoy.access_loggers.stdout
+            #typed_config:
+            #  "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  #host_rewrite_literal: www.envoyproxy.io
+                  cluster: nginx_server
+          http_filters:
+          - name: envoy.filters.http.snort
+            typed_config:
+              "@type": type.googleapis.com/envoy.filters.http.snort.SnortHttpConfig
+              stat_prefix: log
+              save_pcap: false
+              analyze_request: true
+              analyze_response: false
+              unix_socket_path: "/tmp/envoysnort.sock"
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  - name: listener_1
+    address:
+      socket_address:
+        protocol: TCP
+        address: 10.0.8.1
+        port_value: 10001
+    enable_reuse_port: true
+    filter_chains:
+    - transport_socket:
+        name: envoy.transport_sockets.tls
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+          common_tls_context:
+            tls_params:
+              tls_minimum_protocol_version: TLSv1_2  # Specify minimum TLS version
+              tls_maximum_protocol_version: TLSv1_3
+              cipher_suites:
+                - "AES256-GCM-SHA384"
+            tls_certificates:
+            - certificate_chain:
+                filename: "/opt/manoj/envoy_ecdsa.crt"
+              private_key:
+                filename: "/opt/manoj/envoy_ecdsa.key"
+
+      filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+            #access_log:
+            #- name: envoy.access_loggers.stdout
+            #typed_config:
+            #  "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: local_service
+              domains: ["*"]
+              routes:
+              - match:
+                  prefix: "/"
+                route:
+                  #host_rewrite_literal: www.envoyproxy.io
+                  cluster: nginx_secure_server
+          http_filters:
+          - name: envoy.filters.http.snort
+            typed_config:
+              "@type": type.googleapis.com/envoy.filters.http.snort.SnortHttpConfig
+              stat_prefix: log
+              save_pcap: false
+              analyze_request: true
+              analyze_response: false
+              unix_socket_path: "/tmp/envoysnort.sock"
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+  - name: nginx_server
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: service_envoyproxy_io
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                #address: www.envoyproxy.io
+                #port_value: 443
+                address: 10.0.16.4
+                port_value: 8000
+    transport_socket:
+      name: envoy.transport_sockets.upstream
+      typed_config:
+        #"@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer
+        #sni: www.envoyproxy.io
+        #
+  - name: nginx_secure_server
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: service_envoyproxy_io
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                #address: www.envoyproxy.io
+                #port_value: 443
+                address: 10.0.16.4
+                port_value: 8001
+    transport_socket:
+      name: envoy.transport_sockets.upstream
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.UpstreamTlsContext
+        common_tls_context:
+          tls_params:
+            tls_minimum_protocol_version: TLSv1_2  # Specify minimum TLS version
+            tls_maximum_protocol_version: TLSv1_3
+            cipher_suites:
+              - "AES256-GCM-SHA384"
+        #"@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer
+        #sni: www.envoy^Sproxy.io
+
