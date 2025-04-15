@@ -19,6 +19,8 @@ public:
   BaseAnalyzer();
   virtual ~BaseAnalyzer() = default;
 
+  virtual bool analyze(const uint8_t* data, size_t size, const Network::Connection&) = 0;
+
   /**
    * Create Packet.
    */
@@ -26,11 +28,6 @@ public:
   createPacket(const void* data, uint64_t size,
                const Network::Address::InstanceConstSharedPtr& source_address,
                const Network::Address::InstanceConstSharedPtr& destination_address);
-
-  /**
-   * Serialize Headers.
-   */
-  std::string serializeHeaders(const Http::HeaderMap& headers);
 
   uint64_t getSeq() const { return seq_; }
   uint64_t getAck() const { return ack_; }
@@ -51,10 +48,7 @@ private:
 class RequestAnalyzer : public virtual BaseAnalyzer {
 public:
   RequestAnalyzer(bool enable_save_pcap, bool enable_analyze, const std::string& unix_socket_path);
-  virtual bool analyzeRequest(const uint8_t* data, size_t size, const Http::RequestHeaderMap*,
-                              const Http::RequestTrailerMap*, const Network::Connection&);
-  std::string serializeRequestHeaders(const Http::RequestHeaderMap& headers);
-  std::string serializeRequestTrailers(const Http::RequestTrailerMap& trailers);
+  virtual bool analyze(const uint8_t* data, size_t size, const Network::Connection&);
 
 private:
   const bool enable_save_pcap_;
@@ -65,10 +59,7 @@ private:
 class ResponseAnalyzer : public virtual BaseAnalyzer {
 public:
   ResponseAnalyzer(bool enable_save_pcap, bool enable_analyze, const std::string& unix_socket_path);
-  virtual bool analyzeResponse(const uint8_t* data, size_t size, const Http::ResponseHeaderMap*,
-                               const Http::ResponseTrailerMap*, const Network::Connection&);
-  std::string serializeResponseHeaders(const Envoy::Http::ResponseHeaderMap& headers);
-  std::string serializeResponseTrailers(const Http::ResponseTrailerMap& trailers);
+  virtual bool analyze(const uint8_t* data, size_t size, const Network::Connection&);
 
 private:
   const bool enable_save_pcap_;

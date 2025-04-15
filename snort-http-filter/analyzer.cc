@@ -1,7 +1,6 @@
 #include "analyzer.h"
 #include "pcap_file_manager.h"
 #include "source/common/common/logger.h"
-#include "source/common/http/codes.h"
 #include "envoy/common/random_generator.h"
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
@@ -32,26 +31,6 @@ uint32_t BaseAnalyzer::generateRandomNumber() {
   uint32_t randomNumber = distribution(generator);
 
   return randomNumber;
-}
-
-std::string BaseAnalyzer::serializeHeaders(const Http::HeaderMap& headers) {
-  std::ostringstream result;
-
-  // Serialize each header
-  headers.iterate([&result](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
-    auto key = std::string(header.key().getStringView());
-    // Ignore key starting with ":" (e.g: ":authority", ":path", ":status")
-    if (!key.empty() && key[0] == ':') {
-      return Http::HeaderMap::Iterate::Continue;
-    }
-    auto val = header.value() != nullptr ? std::string(header.value().getStringView()) : "";
-    result << key << ": " << val << "\r\n";
-    return Http::HeaderMap::Iterate::Continue;
-  });
-
-  result << "\r\n"; // End of headers
-
-  return result.str();
 }
 
 Buffer::OwnedImpl
@@ -162,46 +141,6 @@ RequestAnalyzer::RequestAnalyzer(bool enable_save_pcap, bool enable_analyze,
   }
 }
 
-std::string RequestAnalyzer::serializeRequestHeaders(const Http::RequestHeaderMap& headers) {
-  std::string result;
-
-  // Serialize method and path
-  absl::string_view method = headers.getMethodValue();
-  absl::string_view scheme = headers.getSchemeValue();
-  absl::string_view path = headers.getPathValue();
-  absl::string_view host = headers.getHostValue();
-  absl::string_view protocol = headers.getProtocolValue();
-  if (protocol.empty()) {
-    protocol = "HTTP/1.1";
-  }
-
-  ENVOY_LOG(
-      trace,
-      "snort serializeRequestHeaders: method: {}, scheme: {}, path: {}, host: {}, protocol: {}",
-      method, scheme, path, host, protocol);
-
-  // Add HTTP request line in payload (e.g:  GET http://example.com/xyz/ HTTP/1.1)
-  result.append(method.data(), method.size());
-  result.append(" ");
-  result.append(scheme.data(), scheme.size());
-  result.append("://");
-  result.append(host.data(), host.size());
-  result.append(path.data(), path.size());
-  result.append(" ");
-  result.append(protocol.data(), protocol.size());
-  result.append("\r\n");
-
-  // Serialize each header
-  result += serializeHeaders(headers);
-
-  ENVOY_LOG(trace, "snort serializeRequestHeaders: result: {}", result);
-  return result;
-}
-
-std::string RequestAnalyzer::serializeRequestTrailers(const Http::RequestTrailerMap& trailers) {
-  return serializeHeaders(trailers);
-}
-
 // Response Analyzer
 ResponseAnalyzer::ResponseAnalyzer(bool enable_save_pcap, bool enable_analyze,
                                    const std::string& unix_socket_path)
@@ -214,64 +153,25 @@ ResponseAnalyzer::ResponseAnalyzer(bool enable_save_pcap, bool enable_analyze,
   }
 }
 
-std::string ResponseAnalyzer::serializeResponseHeaders(const Http::ResponseHeaderMap& headers) {
-  std::string result;
-
-  // Add HTTP version and status code
-  auto status_code = std::string(headers.getStatusValue());
-  if (status_code.empty() || !std::all_of(status_code.begin(), status_code.end(), ::isdigit)) {
-    ENVOY_LOG(error, "Invalid or missing status code: {}", status_code);
-    return ""; // Return an empty string or handle the error as needed
-  }
-  auto status_code_string =
-      std::string(Http::CodeUtility::toString(static_cast<Http::Code>(std::stoi(status_code))));
-
-  // Add HTTP response line in payload (e.g: HTTP/1.1 200 OK)
-  std::string protocol = "HTTP/1.1";
-  result += protocol + " " + status_code + " " + status_code_string + "\r\n";
-
-  // Serialize each header if headers are valid
-  if (!headers.empty()) {
-    result += serializeHeaders(headers);
-  }
-
-  return result;
-}
-
-std::string ResponseAnalyzer::serializeResponseTrailers(const Http::ResponseTrailerMap& trailers) {
-  return serializeHeaders(trailers);
-}
-
 // Request Analyzer
-bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
-                                     const Http::RequestHeaderMap* headers,
-                                     const Http::RequestTrailerMap* trailers,
-                                     const Network::Connection& connection) {
+bool RequestAnalyzer::analyze(const uint8_t* data, size_t size,
+                              const Network::Connection& connection) {
 
   if (!enable_analyze_ && !enable_save_pcap_) {
     ENVOY_LOG_ONCE(trace, "Snort http request analysis and PCAP saving are disabled");
     return true;
   }
 
-  Buffer::OwnedImpl buffer;
-  if (headers) {
-    std::string s = serializeRequestHeaders(*headers);
-    buffer.add(s);
-  }
-  if (data != nullptr && size > 0) {
-    buffer.add(data, size);
-  }
-  if (trailers) {
-    std::string s = serializeRequestTrailers(*trailers);
-    buffer.add(s);
+  if (data == nullptr || size == 0) {
+    ENVOY_LOG(trace, "snort RequestAnalyzer: data is null or size is zero");
+    return true; // No data to analyze
   }
 
   // Get connection source and destination address
   auto source_address = connection.connectionInfoProvider().directRemoteAddress();
   auto destination_address = connection.connectionInfoProvider().directLocalAddress();
 
-  Buffer::OwnedImpl packet = createPacket(buffer.linearize(buffer.length()), buffer.length(),
-                                          source_address, destination_address);
+  Buffer::OwnedImpl packet = createPacket(data, size, source_address, destination_address);
 
   // Write packet to PCAP file
   if (enable_save_pcap_) {
@@ -303,34 +203,25 @@ bool RequestAnalyzer::analyzeRequest(const uint8_t* data, size_t size,
 }
 
 // ResponseAnalyzer
-bool ResponseAnalyzer::analyzeResponse(const uint8_t* data, size_t size,
-                                       const Http::ResponseHeaderMap* headers,
-                                       const Http::ResponseTrailerMap* trailers,
-                                       const Network::Connection& connection) {
+bool ResponseAnalyzer::analyze(const uint8_t* data, size_t size,
+                               const Network::Connection& connection) {
 
   if (!enable_analyze_ && !enable_save_pcap_) {
     ENVOY_LOG_ONCE(trace, "Snort http response analysis and PCAP saving are disabled");
     return true;
   }
 
-  Buffer::OwnedImpl buffer;
-  if (headers) {
-    std::string s = serializeResponseHeaders(*headers);
-    buffer.add(s);
+
+  if (data == nullptr || size == 0) {
+    ENVOY_LOG(trace, "snort ResponseAnalyzer: data is null or size is zero");
+    return true; // No data to analyze
   }
-  if (data != nullptr && size > 0) {
-    buffer.add(data, size);
-  }
-  if (trailers) {
-    std::string s = serializeResponseTrailers(*trailers);
-    buffer.add(s);
-  }
+
   // Get connection details
   auto source_address = connection.connectionInfoProvider().directLocalAddress();
   auto destination_address = connection.connectionInfoProvider().directRemoteAddress();
 
-  Buffer::OwnedImpl packet = createPacket(buffer.linearize(buffer.length()), buffer.length(),
-                                          source_address, destination_address);
+  Buffer::OwnedImpl packet = createPacket(data, size, source_address, destination_address);
 
   // Write packet to PCAP file
   if (enable_save_pcap_) {

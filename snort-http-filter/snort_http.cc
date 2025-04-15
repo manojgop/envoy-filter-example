@@ -1,5 +1,6 @@
 #include "snort_http.h"
 #include "source/common/buffer/buffer_impl.h"
+#include "source/common/http/codes.h"
 
 namespace Envoy {
 namespace Extensions {
@@ -53,10 +54,15 @@ Http::FilterHeadersStatus SnortHttpFilter::decodeHeaders(Http::RequestHeaderMap&
   ENVOY_LOG(trace, "snort http: decodeHeaders Host value {}, end_stream : {}",
             headers.getHostValue(), end_stream);
 
-  request_headers_ = &headers;
+  if (headers.size() > 0) {
+    std::string s = serializeRequestHeaders(headers);
+    request_header_length_ += s.size();
+    buffered_request_data_.add(s);
+  }
+
+  analyzeRequest(end_stream);
 
   if (end_stream) {
-    analyzeRequest(end_stream);
     return Http::FilterHeadersStatus::Continue;
   }
   return Http::FilterHeadersStatus::StopIteration;
@@ -72,9 +78,12 @@ Http::FilterDataStatus SnortHttpFilter::decodeData(Buffer::Instance& data, bool 
   analyzeRequest(end_stream);
 
   if (end_stream) {
+    // Remove headers from beginning buffered_request_data_
+    buffered_request_data_.drain(request_header_length_);
     // Move all buffered data back to 'data' before continuing
     // Envoy filter manager will pass all buffered data to next filter in filter chain
     data.move(buffered_request_data_);
+    processed_request_length_ = 0;                  // Reset processed length
     return Envoy::Http::FilterDataStatus::Continue; // Resume filter chain processing
   }
 
@@ -82,7 +91,10 @@ Http::FilterDataStatus SnortHttpFilter::decodeData(Buffer::Instance& data, bool 
 }
 
 Http::FilterTrailersStatus SnortHttpFilter::decodeTrailers(Http::RequestTrailerMap& trailers) {
-  request_trailers_ = &trailers;
+  if (trailers.size() > 0) {
+    std::string s = serializeRequestTrailers(trailers);
+    buffered_request_data_.add(s);
+  }
   analyzeRequest(true);
   return Http::FilterTrailersStatus::Continue;
 }
@@ -96,10 +108,15 @@ Http::FilterHeadersStatus SnortHttpFilter::encodeHeaders(Http::ResponseHeaderMap
   ENVOY_LOG(trace, "snort http: encodeHeaders status {}, end_stream: {}", headers.getStatusValue(),
             end_stream);
 
-  response_headers_ = &headers;
+  if (headers.size() > 0) {
+    std::string s = serializeResponseHeaders(headers);
+    response_header_length_ += s.size();
+    buffered_response_data_.add(s);
+  }
+
+  analyzeResponse(end_stream);
 
   if (end_stream) {
-    analyzeResponse(end_stream);
     return Http::FilterHeadersStatus::Continue;
   }
   return Http::FilterHeadersStatus::StopIteration;
@@ -115,8 +132,11 @@ Http::FilterDataStatus SnortHttpFilter::encodeData(Buffer::Instance& data, bool 
   analyzeResponse(end_stream);
 
   if (end_stream) {
+    // Remove headers from beginning buffered_response_data_
+    buffered_response_data_.drain(response_header_length_);
     // Move all buffered data back to 'data' before continuing
     data.move(buffered_response_data_);
+    processed_response_length_ = 0;                 // Reset processed length
     return Envoy::Http::FilterDataStatus::Continue; // Resume filter chain processing
   }
 
@@ -124,7 +144,10 @@ Http::FilterDataStatus SnortHttpFilter::encodeData(Buffer::Instance& data, bool 
 }
 
 Http::FilterTrailersStatus SnortHttpFilter::encodeTrailers(Http::ResponseTrailerMap& trailers) {
-  response_trailers_ = &trailers;
+  if (trailers.size() > 0) {
+    std::string s = serializeResponseTrailers(trailers);
+    buffered_response_data_.add(s);
+  }
   analyzeResponse(true);
   return Http::FilterTrailersStatus::Continue;
 }
@@ -140,14 +163,6 @@ void SnortHttpFilter::analyzeRequest(bool end_stream) {
   if (buffered_request_data_.length() > 0) {
     result = processData(buffered_request_data_, processed_request_length_, kThreshold, end_stream,
                          true);
-  }
-
-  if (result) {
-    // If http request does not have body and end of stream is reached process headers.
-    // Process trailers if not processed yet.
-    if ((end_stream && request_headers_) || request_trailers_) {
-      result = processRequest(nullptr, 0);
-    }
   }
 
   if (result) {
@@ -170,14 +185,6 @@ void SnortHttpFilter::analyzeResponse(bool end_stream) {
   if (buffered_response_data_.length() > 0) {
     result = processData(buffered_response_data_, processed_response_length_, kThreshold,
                          end_stream, false);
-  }
-
-  if (result) {
-    // If http response does not have body and end of stream is reached process headers.
-    // Process trailers if not processed yet.
-    if ((end_stream && response_headers_) || response_trailers_) {
-      result = processResponse(nullptr, 0);
-    }
   }
 
   if (result) {
@@ -261,12 +268,7 @@ bool SnortHttpFilter::processRequest(const uint8_t* data, size_t size) {
   // Update ack for request. Ack all responses got so far.
   request_analyzer_->setAck(response_analyzer_->getSeq());
 
-  bool allow = request_analyzer_->analyzeRequest(data, size, request_headers_, request_trailers_,
-                                                 decoder_callbacks_->connection().ref());
-
-  // Request header and trailer is processed. Set it to nullptr.
-  request_headers_ = nullptr;
-  request_trailers_ = nullptr;
+  bool allow = request_analyzer_->analyze(data, size, decoder_callbacks_->connection().ref());
 
   return allow;
 }
@@ -276,14 +278,97 @@ bool SnortHttpFilter::processResponse(const uint8_t* data, size_t size) {
   // Update ack for response. Ack all requests got so far.
   response_analyzer_->setAck(request_analyzer_->getSeq());
 
-  bool allow = response_analyzer_->analyzeResponse(
-      data, size, response_headers_, response_trailers_, encoder_callbacks_->connection().ref());
-
-  // Response header and trailer is processed. Set it to nullptr.
-  response_headers_ = nullptr;
-  response_trailers_ = nullptr;
+  bool allow = response_analyzer_->analyze(data, size, encoder_callbacks_->connection().ref());
 
   return allow;
+}
+
+std::string SnortHttpFilter::serializeHeaders(const Http::HeaderMap& headers) {
+  std::ostringstream result;
+
+  // Serialize each header
+  headers.iterate([&result](const Http::HeaderEntry& header) -> Http::HeaderMap::Iterate {
+    auto key = std::string(header.key().getStringView());
+    // Ignore key starting with ":" (e.g: ":authority", ":path", ":status")
+    if (!key.empty() && key[0] == ':') {
+      return Http::HeaderMap::Iterate::Continue;
+    }
+    auto val = header.value() != nullptr ? std::string(header.value().getStringView()) : "";
+    result << key << ": " << val << "\r\n";
+    return Http::HeaderMap::Iterate::Continue;
+  });
+
+  result << "\r\n"; // End of headers
+
+  return result.str();
+}
+
+std::string SnortHttpFilter::serializeRequestHeaders(const Http::RequestHeaderMap& headers) {
+  std::string result;
+
+  // Serialize method and path
+  absl::string_view method = headers.getMethodValue();
+  absl::string_view scheme = headers.getSchemeValue();
+  absl::string_view path = headers.getPathValue();
+  absl::string_view host = headers.getHostValue();
+  absl::string_view protocol = headers.getProtocolValue();
+  if (protocol.empty()) {
+    protocol = "HTTP/1.1";
+  }
+
+  ENVOY_LOG(
+      trace,
+      "snort serializeRequestHeaders: method: {}, scheme: {}, path: {}, host: {}, protocol: {}",
+      method, scheme, path, host, protocol);
+
+  // Add HTTP request line in payload (e.g:  GET http://example.com/xyz/ HTTP/1.1)
+  result.append(method.data(), method.size());
+  result.append(" ");
+  result.append(scheme.data(), scheme.size());
+  result.append("://");
+  result.append(host.data(), host.size());
+  result.append(path.data(), path.size());
+  result.append(" ");
+  result.append(protocol.data(), protocol.size());
+  result.append("\r\n");
+
+  // Serialize each header
+  result += serializeHeaders(headers);
+
+  ENVOY_LOG(trace, "snort serializeRequestHeaders: result: {}", result);
+  return result;
+}
+
+std::string SnortHttpFilter::serializeRequestTrailers(const Http::RequestTrailerMap& trailers) {
+  return serializeHeaders(trailers);
+}
+
+std::string SnortHttpFilter::serializeResponseHeaders(const Http::ResponseHeaderMap& headers) {
+  std::string result;
+
+  // Add HTTP version and status code
+  auto status_code = std::string(headers.getStatusValue());
+  if (status_code.empty() || !std::all_of(status_code.begin(), status_code.end(), ::isdigit)) {
+    ENVOY_LOG(error, "Invalid or missing status code: {}", status_code);
+    return ""; // Return an empty string or handle the error as needed
+  }
+  auto status_code_string =
+      std::string(Http::CodeUtility::toString(static_cast<Http::Code>(std::stoi(status_code))));
+
+  // Add HTTP response line in payload (e.g: HTTP/1.1 200 OK)
+  std::string protocol = "HTTP/1.1";
+  result += protocol + " " + status_code + " " + status_code_string + "\r\n";
+
+  // Serialize each header if headers are valid
+  if (!headers.empty()) {
+    result += serializeHeaders(headers);
+  }
+
+  return result;
+}
+
+std::string SnortHttpFilter::serializeResponseTrailers(const Http::ResponseTrailerMap& trailers) {
+  return serializeHeaders(trailers);
 }
 
 } // namespace SnortHttp

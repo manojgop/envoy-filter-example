@@ -82,14 +82,11 @@ private:
   std::unique_ptr<RequestAnalyzer> request_analyzer_;
   std::unique_ptr<ResponseAnalyzer> response_analyzer_;
 
-  Http::RequestHeaderMap* request_headers_ = nullptr;
   Buffer::OwnedImpl buffered_request_data_;
-  Http::RequestTrailerMap* request_trailers_ = nullptr;
-
-  Http::ResponseHeaderMap* response_headers_ = nullptr;
   Buffer::OwnedImpl buffered_response_data_;
-  Http::ResponseTrailerMap* response_trailers_ = nullptr;
 
+  uint64_t request_header_length_ = 0;
+  uint64_t response_header_length_ = 0;
   uint64_t processed_request_length_ = 0;
   uint64_t processed_response_length_ = 0;
   const size_t kThreshold = 1024 * 4; // 4KB threshold for processing data
@@ -103,6 +100,12 @@ private:
                            size_t length, bool is_request);
   bool processRequest(const uint8_t* data, size_t size);
   bool processResponse(const uint8_t* data, size_t size);
+
+  std::string serializeHeaders(const Http::HeaderMap& headers);
+  std::string serializeRequestHeaders(const Http::RequestHeaderMap& headers);
+  std::string serializeRequestTrailers(const Http::RequestTrailerMap& trailers);
+  std::string serializeResponseHeaders(const Envoy::Http::ResponseHeaderMap& headers);
+  std::string serializeResponseTrailers(const Http::ResponseTrailerMap& trailers);
 };
 
 } // namespace SnortHttp
