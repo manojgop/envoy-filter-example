@@ -6,8 +6,22 @@ import "validate/validate.proto";
 
 message SnortHttpConfig {
     string stat_prefix = 1 [(validate.rules).string = {min_len: 1}];
+
+    // Enable saving http request and response in pcap file (output.pcap).
     optional bool save_pcap = 2;
+
+    // Enable to analyze http request with Snort
     optional bool analyze_request = 3;
+
+    // Enable to analyze http response with Snort
     optional bool analyze_response = 4;
+
+    // Unix socket path for communicating with Snort
     optional string unix_socket_path = 5; // Default value is "/tmp/envoysnort.sock"
+
+    // Buffer http payload till threshold value before sending data to snort for analysis
+    // Higher value means less frequent communication with Snort for analyzing data
+    // Lower value means data send to snort more frequently for analysis.
+    // Note: Snort snaplen value configured should be >= buffer_threshold
+    optional uint64 buffer_threshold = 6; // Default value is 1024
 }

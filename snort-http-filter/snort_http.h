@@ -43,6 +43,7 @@ public:
   bool analyseRequestField() const { return analyze_request_; }
   bool analyseResponseField() const { return analyze_response_; }
   const std::string& unixSocketPath() const { return unix_socket_path_; }
+  uint64_t bufferThreshold() const { return buffer_threshold_; }
 
 private:
   const std::string stat_prefix_;
@@ -51,9 +52,12 @@ private:
   const bool analyze_request_;
   const bool analyze_response_;
   const std::string unix_socket_path_;
+  const uint64_t buffer_threshold_;
   static SnortHttpStats generateStats(const std::string& prefix, Stats::Scope& scope);
   static std::string
   getUnixSocketPath(const envoy::filters::http::snort::SnortHttpConfig& proto_config);
+  static uint64_t
+  getBufferThreshold(const envoy::filters::http::snort::SnortHttpConfig& proto_config);
 };
 
 using SnortHttpFilterConfigSharedPtr = std::shared_ptr<SnortHttpFilterConfig>;
@@ -85,17 +89,17 @@ private:
   Buffer::OwnedImpl buffered_request_data_;
   Buffer::OwnedImpl buffered_response_data_;
 
+  const uint64_t buffer_threshold_;
   uint64_t request_header_length_ = 0;
   uint64_t response_header_length_ = 0;
   uint64_t processed_request_length_ = 0;
   uint64_t processed_response_length_ = 0;
-  const size_t kThreshold = 1024 * 4; // 4KB threshold for processing data
 
   void analyzeRequest(bool end_stream);
   void analyzeResponse(bool end_stream);
 
   bool processData(const Envoy::Buffer::Instance& buffer, uint64_t& processed_length,
-                   uint64_t threshold, bool end_stream, bool is_request);
+                   bool end_stream, bool is_request);
   bool processBufferedData(const Envoy::Buffer::Instance& buffer, size_t start_offset,
                            size_t length, bool is_request);
   bool processRequest(const uint8_t* data, size_t size);

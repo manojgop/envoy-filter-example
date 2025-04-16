@@ -14,8 +14,14 @@ SnortHttpFilterConfig::SnortHttpFilterConfig(
       stats_(generateStats(proto_config.stat_prefix(), scope)),
       save_pcap_(proto_config.save_pcap()), analyze_request_(proto_config.analyze_request()),
       analyze_response_(proto_config.analyze_response()),
-      unix_socket_path_(getUnixSocketPath(proto_config)) {
+      unix_socket_path_(getUnixSocketPath(proto_config)),
+      buffer_threshold_(getBufferThreshold(proto_config)) {
   ENVOY_LOG(trace, "snort http config created");
+  ENVOY_LOG(trace, "snort http config: stat_prefix: {}, save_pcap: {}, "
+                   "analyze_request: {}, analyze_response: {}, unix_socket_path: {}, "
+                   "buffer_threshold: {}",
+            stat_prefix_, save_pcap_, analyze_request_, analyze_response_,
+            unix_socket_path_, buffer_threshold_);
 }
 
 SnortHttpStats SnortHttpFilterConfig::generateStats(const std::string& prefix,
@@ -37,8 +43,21 @@ std::string SnortHttpFilterConfig::getUnixSocketPath(
   return unix_socket_path;
 }
 
+uint64_t SnortHttpFilterConfig::getBufferThreshold(
+    const envoy::filters::http::snort::SnortHttpConfig& proto_config) {
+  uint64_t buffer_threshold = 0;
+  if (proto_config.has_buffer_threshold()) {
+    buffer_threshold = proto_config.buffer_threshold();
+  } else {
+    // Default threshold
+    buffer_threshold = 1024; // 1KB
+  }
+  return buffer_threshold;
+}
+
 // Snort Http Filter
-SnortHttpFilter::SnortHttpFilter(SnortHttpFilterConfigSharedPtr config) : config_(config) {
+SnortHttpFilter::SnortHttpFilter(SnortHttpFilterConfigSharedPtr config)
+    : config_(config), buffer_threshold_(config->bufferThreshold()) {
   ENVOY_LOG(trace, "snort http filter created");
 
   processed_request_length_ = 0;
@@ -161,8 +180,7 @@ void SnortHttpFilter::analyzeRequest(bool end_stream) {
   // If there is buffered http body, process it.
   // This will process headers/trailers along with http body.
   if (buffered_request_data_.length() > 0) {
-    result = processData(buffered_request_data_, processed_request_length_, kThreshold, end_stream,
-                         true);
+    result = processData(buffered_request_data_, processed_request_length_, end_stream, true);
   }
 
   if (result) {
@@ -183,8 +201,7 @@ void SnortHttpFilter::analyzeResponse(bool end_stream) {
   // If there is buffered http body process it.
   // This will process headers/trailers along with http body.
   if (buffered_response_data_.length() > 0) {
-    result = processData(buffered_response_data_, processed_response_length_, kThreshold,
-                         end_stream, false);
+    result = processData(buffered_response_data_, processed_response_length_, end_stream, false);
   }
 
   if (result) {
@@ -202,12 +219,12 @@ void SnortHttpFilter::analyzeResponse(bool end_stream) {
 }
 
 bool SnortHttpFilter::processData(const Envoy::Buffer::Instance& buffer, uint64_t& processed_length,
-                                  uint64_t threshold, bool end_stream, bool is_request) {
+                                  bool end_stream, bool is_request) {
 
   bool result = true;
   // Process buffered data if it exceeds threshold
-  while (buffer.length() - processed_length >= threshold) {
-    size_t slice_length = threshold;
+  while (buffer.length() - processed_length >= buffer_threshold_) {
+    size_t slice_length = buffer_threshold_;
     result = processBufferedData(buffer, processed_length, slice_length, is_request);
     processed_length += slice_length; // Update processed length
     if (!result) {
