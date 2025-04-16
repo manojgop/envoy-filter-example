@@ -69,7 +69,9 @@ BaseAnalyzer::createPacket(const void* data, uint64_t size,
   tcp_hdr.th_flags = TH_PUSH | TH_ACK;
   tcp_hdr.th_win = htons(8192); // Window size
   tcp_hdr.th_sport = htons(source_address->ip()->port());
-  tcp_hdr.th_dport = htons(destination_address->ip()->port());
+  // Use port 80 to simulate HTTP request for Snort analysis
+  // Snort seem to ignore evaluating http packet if destination port is not 80
+  tcp_hdr.th_dport = htons(80);
 
   tcp_hdr.th_seq = htonl(seq_);
   tcp_hdr.th_ack = htonl(ack_);
