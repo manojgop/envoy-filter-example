@@ -31,7 +31,7 @@ local function ssl_proxy_connect()
 
     local params = {
         mode = "client",
-        protocol = "tlsv1_2",
+        protocol = "any",
         verify = "none"
     }
     local ssl_sock, err = ssl.wrap(sock, params)
