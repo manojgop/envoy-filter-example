@@ -99,6 +99,7 @@ To run performance test with wrk tool, we need to use lua script to connect with
 1. Install the following packages
 
    ```
+   sudo apt-get install liblua5.1-dev
    sudo apt-get install luarocks
    sudo luarocks install luasocket
    sudo luarocks install luasec
